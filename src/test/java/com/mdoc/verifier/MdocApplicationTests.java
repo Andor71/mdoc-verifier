@@ -1,4 +1,4 @@
-package com.mdoc.mdoc;
+package com.mdoc.verifier;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
