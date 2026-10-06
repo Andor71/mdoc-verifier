@@ -1,4 +1,4 @@
-package com.mdoc.mdoc;
+package com.mdoc.verifier;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
