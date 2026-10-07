@@ -3,9 +3,10 @@ target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+.claude
 
 ### STS ###
-.apt_generated
+.apt_generatedok
 .classpath
 .factorypath
 .project
