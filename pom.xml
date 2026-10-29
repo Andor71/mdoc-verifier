@@ -30,6 +30,8 @@
 		<java.version>21</java.version>
 	</properties>
 	<dependencies>
+
+		<!--	Spring boot 	-->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc</artifactId>
@@ -48,6 +50,15 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
+
+
+		<!--	Mdoc	-->
+		<dependency>
+			<groupId>com.authlete</groupId>
+			<artifactId>cbor</artifactId>
+			<version>1.21</version>
+		</dependency>
+
 	</dependencies>
 
 	<build>
