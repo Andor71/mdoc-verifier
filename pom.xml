@@ -28,6 +28,8 @@
 	</scm>
 	<properties>
 		<java.version>21</java.version>
+		<!-- Filled by jacoco:prepare-agent; empty when JaCoCo is skipped, so @{jacocoArgLine} still resolves -->
+		<jacocoArgLine/>
 	</properties>
 	<dependencies>
 
@@ -84,6 +86,79 @@
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<!-- @{...}: resolved when the tests start, after prepare-agent has set it -->
+					<argLine>@{jacocoArgLine}</argLine>
+				</configuration>
+			</plugin>
+			<!--
+				Line and branch coverage. prepare-agent puts the JaCoCo agent into surefire's argLine, the tests record
+				which code ran, report turns that into target/site/jacoco/ (index.html, jacoco.xml, jacoco.csv) during
+				verify, and check fails the build below the minimums.
+			-->
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>0.8.16</version>
+				<configuration>
+					<excludes>
+						<!-- same exclusions as PIT: main() and Lombok data holders -->
+						<exclude>com/mdoc/verifier/MdocApplication.class</exclude>
+						<exclude>com/mdoc/verifier/dto/**</exclude>
+					</excludes>
+				</configuration>
+				<executions>
+					<execution>
+						<id>prepare-agent</id>
+						<goals>
+							<goal>prepare-agent</goal>
+						</goals>
+						<configuration>
+							<!-- Not the default "argLine": PIT reads that property too and would run every mutant
+							     with the JaCoCo agent on top of its own. Surefire picks this one up by name below. -->
+							<propertyName>jacocoArgLine</propertyName>
+						</configuration>
+					</execution>
+					<execution>
+						<id>report</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>report</goal>
+						</goals>
+					</execution>
+					<execution>
+						<!-- After report (same phase, declared later). 98.8% lines / 99.6% branches today; the slack is
+						     for unreachable defensive code, e.g. catch blocks for IOExceptions a byte array never throws. -->
+						<id>check</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>check</goal>
+						</goals>
+						<configuration>
+							<rules>
+								<rule>
+									<element>BUNDLE</element>
+									<limits>
+										<limit>
+											<counter>LINE</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>0.90</minimum>
+										</limit>
+										<limit>
+											<counter>BRANCH</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>0.85</minimum>
+										</limit>
+									</limits>
+								</rule>
+							</rules>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
 			<!--
 				Mutation testing: PIT changes the compiled code one small step at a time (a > becomes >=, a return
 				value becomes null, a call is removed, ...) and runs the tests covering that line against each mutant.
@@ -115,6 +190,8 @@
 						<param>com.mdoc.verifier.dto.*</param>
 					</excludedClasses>
 					<threads>4</threads>
+					<!-- Surefire's argLine carries the JaCoCo agent; PIT measures coverage itself and must not inherit it -->
+					<parseSurefireArgLine>false</parseSurefireArgLine>
 					<!-- Fails the run below this score. 100% today; the slack is for equivalent mutants in future code
 					     (a change no test can observe because the behaviour stays the same). -->
 					<mutationThreshold>90</mutationThreshold>
