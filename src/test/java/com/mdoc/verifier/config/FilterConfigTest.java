@@ -15,7 +15,7 @@ import org.springframework.web.servlet.HandlerExceptionResolver;
  */
 class FilterConfigTest {
 
-    private final LimitProperties limits = new LimitProperties(1000,
+    private final LimitProperties limits = new LimitProperties(1000, 32,
             new LimitProperties.RateLimit(10, 30, Duration.ofMinutes(1), 1000, Duration.ofMinutes(10)));
     private final HandlerExceptionResolver resolver = (request, response, handler, e) -> null;
     private final FilterConfig config = new FilterConfig();

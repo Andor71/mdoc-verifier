@@ -11,6 +11,9 @@ mdoc:
   limits:
     # Whole JSON body. Must stay above mDocInputDto.MAX_MDOC_LENGTH plus the JSON around it.
     max-body-bytes: 131072        # 128 KiB
+    # Arrays, maps and tags nested deeper than this are rejected before the recursive decoder runs (CBOR bomb).
+    # A DeviceResponse needs about 6 levels per decode call (tag-24 contents are decoded separately). 1..256.
+    max-cbor-depth: 32
     rate-limit:
       capacity: 10                # burst: 10 requests at once
       refill-tokens: 30           # then 30 per minute on average (one token every 2 s)

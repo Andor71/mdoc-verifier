@@ -10,6 +10,7 @@ import static com.mdoc.verifier.support.Cbor.tag;
 import static com.mdoc.verifier.support.Cbor.text;
 import static com.mdoc.verifier.support.MdocFixtures.CERT;
 import static com.mdoc.verifier.support.MdocFixtures.DOC_TYPE;
+import static com.mdoc.verifier.support.MdocFixtures.PARSER;
 import static com.mdoc.verifier.support.MdocFixtures.SIGNATURE;
 import static com.mdoc.verifier.support.MdocFixtures.assertDecodeError;
 import static com.mdoc.verifier.support.MdocFixtures.issuerAuth;
@@ -32,7 +33,7 @@ class IssuerAuthServiceTest {
 
     private static final String PATH = "$.ia";
 
-    private final IssuerAuthService service = new IssuerAuthService();
+    private final IssuerAuthService service = new IssuerAuthService(PARSER);
     private final DecodeWarnings warnings = new DecodeWarnings();
 
     private JsonNode decode(final CBORItem issuerAuth) {

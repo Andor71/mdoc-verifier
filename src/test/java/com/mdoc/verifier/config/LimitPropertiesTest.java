@@ -16,16 +16,16 @@ class LimitPropertiesTest {
 
     @Test
     void acceptsTheShippedValues() {
-        assertThatCode(() -> new LimitProperties(131072, rateLimit(10, Duration.ofMinutes(10))))
+        assertThatCode(() -> new LimitProperties(131072, 32, rateLimit(10, Duration.ofMinutes(10))))
                 .doesNotThrowAnyException();
     }
 
     @Test
     void rejectsMissingOrNonPositiveValues() {
         // A property left out of the yaml binds as 0 or null.
-        assertThatThrownBy(() -> new LimitProperties(0, rateLimit(10, Duration.ofMinutes(10))))
+        assertThatThrownBy(() -> new LimitProperties(0, 32, rateLimit(10, Duration.ofMinutes(10))))
                 .hasMessageContaining("max-body-bytes");
-        assertThatThrownBy(() -> new LimitProperties(131072, null))
+        assertThatThrownBy(() -> new LimitProperties(131072, 32, null))
                 .hasMessageContaining("rate-limit");
         assertThatThrownBy(() -> rateLimit(0, Duration.ofMinutes(10)))
                 .hasMessageContaining("must be positive");
@@ -37,6 +37,19 @@ class LimitPropertiesTest {
                 .hasMessageContaining("refill-period");
         assertThatThrownBy(() -> new LimitProperties.RateLimit(10, 30, Duration.ofMinutes(1), 1000, null))
                 .hasMessageContaining("idle-timeout");
+    }
+
+    @Test
+    void cborDepthMustStayBelowTheCeiling() {
+        final LimitProperties.RateLimit rateLimit = rateLimit(10, Duration.ofMinutes(10));
+        final int ceiling = LimitProperties.MAX_CBOR_DEPTH_CEILING;
+
+        assertThatCode(() -> new LimitProperties(131072, 1, rateLimit)).doesNotThrowAnyException();
+        assertThatCode(() -> new LimitProperties(131072, ceiling, rateLimit)).doesNotThrowAnyException();
+        assertThatThrownBy(() -> new LimitProperties(131072, 0, rateLimit))
+                .hasMessage("mdoc.limits.max-cbor-depth must be between 1 and 256"); // also: left out of the yaml
+        assertThatThrownBy(() -> new LimitProperties(131072, ceiling + 1, rateLimit))
+                .hasMessage("mdoc.limits.max-cbor-depth must be between 1 and 256");
     }
 
     @Test

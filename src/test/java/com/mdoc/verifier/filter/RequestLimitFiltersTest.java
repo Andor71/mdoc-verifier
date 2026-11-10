@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.mdoc.verifier.config.CborConfig;
 import com.mdoc.verifier.config.FilterConfig;
 import com.mdoc.verifier.controller.DecodeController;
 import com.mdoc.verifier.controller.HealthController;
@@ -34,7 +35,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 @WebMvcTest(controllers = {DecodeController.class, HealthController.class}, properties = {
         "mdoc.limits.rate-limit.capacity=2",
         "mdoc.limits.max-body-bytes=2000"}) // VALID_REQUEST is about 1 KB
-@Import({FilterConfig.class, DecodeService.class, NameSpaceService.class, IssuerAuthService.class,
+@Import({FilterConfig.class, CborConfig.class, DecodeService.class, NameSpaceService.class, IssuerAuthService.class,
         GlobalExceptionHandler.class})
 class RequestLimitFiltersTest {
 

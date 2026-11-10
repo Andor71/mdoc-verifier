@@ -8,6 +8,7 @@ import static com.mdoc.verifier.support.Cbor.raw;
 import static com.mdoc.verifier.support.Cbor.tag;
 import static com.mdoc.verifier.support.Cbor.text;
 import static com.mdoc.verifier.support.Cbor.textMap;
+import static com.mdoc.verifier.support.MdocFixtures.PARSER;
 import static com.mdoc.verifier.support.MdocFixtures.assertDecodeError;
 import static com.mdoc.verifier.support.MdocFixtures.issuerSignedItem;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -24,7 +25,7 @@ class NameSpaceServiceTest {
     private static final String PATH = "$.ns";
     private static final String ITEM_PATH = "$.ns[\"org.example\"][0]";
 
-    private final NameSpaceService service = new NameSpaceService();
+    private final NameSpaceService service = new NameSpaceService(PARSER);
 
     private JsonNode decode(final CBORItem nameSpaces) {
         return service.decode(nameSpaces, PATH);

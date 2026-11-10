@@ -5,6 +5,7 @@ import static com.mdoc.verifier.support.Cbor.integer;
 import static com.mdoc.verifier.support.Cbor.text;
 import static com.mdoc.verifier.support.Cbor.textMap;
 import static com.mdoc.verifier.support.MdocFixtures.DOC_TYPE;
+import static com.mdoc.verifier.support.MdocFixtures.PARSER;
 import static com.mdoc.verifier.support.MdocFixtures.assertDecodeError;
 import static com.mdoc.verifier.support.MdocFixtures.deviceResponse;
 import static com.mdoc.verifier.support.MdocFixtures.document;
@@ -83,7 +84,7 @@ class DecodeServiceTest {
     // so nothing else changes. Decoding does not check the signature, so this is fine for decode tests.
     private static final String CONFORMANT_SAMPLE = replaceOnce(TAG24_PAYLOAD_SAMPLE, PAYLOAD_HEAD, "590136" + PAYLOAD_HEAD);
 
-    private final DecodeService decodeService = new DecodeService(new NameSpaceService(), new IssuerAuthService());
+    private final DecodeService decodeService = new DecodeService(new NameSpaceService(PARSER), new IssuerAuthService(PARSER), PARSER);
 
     @Test
     void tag24PayloadWithoutBstrIsDecodedWithWarning() {

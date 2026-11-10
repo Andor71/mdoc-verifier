@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.mdoc.verifier.dto.mDocInputDto;
+import com.mdoc.verifier.config.CborConfig;
 import com.mdoc.verifier.exception.GlobalExceptionHandler;
 import com.mdoc.verifier.service.DecodeService;
 import com.mdoc.verifier.service.IssuerAuthService;
@@ -26,7 +27,7 @@ import org.springframework.test.web.servlet.ResultActions;
 
 /** HTTP layer with the real services: JSON in, JSON or RFC 9457 problem+json out. */
 @WebMvcTest(controllers = {DecodeController.class, HealthController.class})
-@Import({DecodeService.class, NameSpaceService.class, IssuerAuthService.class, GlobalExceptionHandler.class})
+@Import({CborConfig.class, DecodeService.class, NameSpaceService.class, IssuerAuthService.class, GlobalExceptionHandler.class})
 class DecodeControllerTest {
 
     @Autowired

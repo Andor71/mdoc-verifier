@@ -18,6 +18,7 @@ import com.mdoc.verifier.dto.mDocInputDto;
 import com.mdoc.verifier.enums.ErrorCode;
 import com.mdoc.verifier.enums.InputType;
 import com.mdoc.verifier.exception.MdocDecodeException;
+import com.mdoc.verifier.util.CborParser;
 import org.assertj.core.api.AbstractThrowableAssert;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 
@@ -31,6 +32,10 @@ public final class MdocFixtures {
     public static final String NAME_SPACE = "org.example.ns";
     public static final byte[] CERT = Cbor.raw(0x30, 0x03, 0x02, 0x01, 0x01);
     public static final byte[] SIGNATURE = new byte[64];
+
+    /** The shipped nesting limit, mdoc.limits.max-cbor-depth in application.yaml. */
+    public static final int MAX_CBOR_DEPTH = 32;
+    public static final CborParser PARSER = new CborParser(MAX_CBOR_DEPTH);
 
     private MdocFixtures() {
     }
