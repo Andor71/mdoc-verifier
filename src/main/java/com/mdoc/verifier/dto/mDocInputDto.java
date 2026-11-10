@@ -5,14 +5,19 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
-import lombok.NonNull;
 
 @Data
 public class mDocInputDto {
 
+    /**
+     * 100 000 characters = 75 KB of CBOR as base64, 50 KB as hex. Room for a portrait and an x5chain;
+     * the sample vector without a portrait is 2.6 KB. Check against real samples and adjust.
+     */
+    public static final int MAX_MDOC_LENGTH = 100_000;
+
     @NotNull(message = "mdoc field is required")
     @NotEmpty(message = "mdoc field cannot be empty")
-    @Size(max = 10000, message = "mdoc field cannot exceed 10000 characters")
+    @Size(max = MAX_MDOC_LENGTH, message = "mdoc field cannot exceed {max} characters")
     private String mdoc;
 
     @NotNull(message = "inputType field is required")
