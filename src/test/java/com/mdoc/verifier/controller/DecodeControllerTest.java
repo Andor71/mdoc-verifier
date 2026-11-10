@@ -81,6 +81,7 @@ class DecodeControllerTest {
     void validationFailureIsProblemJsonNamingTheField() throws Exception {
         postDecode(request("a".repeat(mDocInputDto.MAX_MDOC_LENGTH + 1), "HEX"))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Invalid request"))
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
                 .andExpect(jsonPath("$.detail").value("mdoc: mdoc field cannot exceed 100000 characters"));
     }

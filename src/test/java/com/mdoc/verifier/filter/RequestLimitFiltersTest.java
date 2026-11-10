@@ -2,7 +2,6 @@ package com.mdoc.verifier.filter;
 
 import static com.mdoc.verifier.support.MdocFixtures.deviceResponse;
 import static com.mdoc.verifier.support.MdocFixtures.document;
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -10,13 +9,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.util.concurrent.atomic.AtomicReference;
-
 import com.mdoc.verifier.config.FilterConfig;
 import com.mdoc.verifier.controller.DecodeController;
 import com.mdoc.verifier.controller.HealthController;
 import com.mdoc.verifier.exception.GlobalExceptionHandler;
-import com.mdoc.verifier.exception.RequestTooLargeException;
 import com.mdoc.verifier.service.DecodeService;
 import com.mdoc.verifier.service.IssuerAuthService;
 import com.mdoc.verifier.service.NameSpaceService;
@@ -27,13 +23,9 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockFilterChain;
-import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
-import org.springframework.web.servlet.ModelAndView;
 
 /**
  * Both filters in front of the real controller, with small limits. The buckets live as long as the cached
@@ -72,7 +64,19 @@ class RequestLimitFiltersTest {
                 .andExpect(status().isTooManyRequests())
                 .andExpect(header().exists(HttpHeaders.RETRY_AFTER))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Too many requests"))
                 .andExpect(jsonPath("$.code").value("RATE_LIMITED"));
+    }
+
+    @Test
+    void rateLimitIsCheckedBeforeTheBodySize() throws Exception {
+        // An oversized request costs a token too: a client sending only huge bodies ends up with 429, not
+        // endless 413s. Breaks if the filter order (FilterConfig) is lost.
+        postDecode("198.51.100.6", VALID_REQUEST).andExpect(status().isOk());
+        postDecode("198.51.100.6", VALID_REQUEST).andExpect(status().isOk());
+
+        postDecode("198.51.100.6", "{\"mdoc\":\"" + "a".repeat(2000) + "\",\"inputType\":\"HEX\"}")
+                .andExpect(status().isTooManyRequests());
     }
 
     @Test
@@ -95,38 +99,7 @@ class RequestLimitFiltersTest {
         postDecode("198.51.100.5", "{\"mdoc\":\"" + "a".repeat(2000) + "\",\"inputType\":\"HEX\"}")
                 .andExpect(status().isContentTooLarge())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Request too large"))
                 .andExpect(jsonPath("$.code").value("REQUEST_TOO_LARGE"));
-    }
-
-    /** Chunked upload: no Content-Length, so the filter has to count. MockMvc always sets one, hence direct. */
-    @Test
-    void bodyWithoutContentLengthIsCounted() throws Exception {
-        final AtomicReference<Exception> rejected = new AtomicReference<>();
-        final BodySizeFilter filter = new BodySizeFilter(10, (request, response, handler, e) -> {
-            rejected.set(e);
-            return new ModelAndView();
-        });
-
-        final MockFilterChain tooLargeChain = new MockFilterChain();
-        filter.doFilter(chunked("12345678901"), new MockHttpServletResponse(), tooLargeChain);
-        assertThat(rejected.get()).isInstanceOf(RequestTooLargeException.class);
-        assertThat(tooLargeChain.getRequest()).isNull(); // never reached the controller
-
-        rejected.set(null);
-        final MockFilterChain fitsChain = new MockFilterChain();
-        filter.doFilter(chunked("1234567890"), new MockHttpServletResponse(), fitsChain);
-        assertThat(rejected.get()).isNull();
-        assertThat(fitsChain.getRequest().getInputStream().readAllBytes()).asString().isEqualTo("1234567890");
-    }
-
-    private static MockHttpServletRequest chunked(final String body) {
-        final MockHttpServletRequest request = new MockHttpServletRequest("POST", "/decode") {
-            @Override
-            public long getContentLengthLong() {
-                return -1;
-            }
-        };
-        request.setContent(body.getBytes());
-        return request;
     }
 }

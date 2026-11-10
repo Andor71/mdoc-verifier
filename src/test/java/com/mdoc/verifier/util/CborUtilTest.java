@@ -16,12 +16,14 @@ import java.util.stream.Stream;
 
 import com.authlete.cbor.CBORBigInteger;
 import com.authlete.cbor.CBORBoolean;
+import com.authlete.cbor.CBORByteArray;
 import com.authlete.cbor.CBORDouble;
 import com.authlete.cbor.CBORFloat;
 import com.authlete.cbor.CBORItem;
 import com.authlete.cbor.CBORItemList;
 import com.authlete.cbor.CBORLong;
 import com.authlete.cbor.CBORNull;
+import com.authlete.cbor.CBORPairList;
 import com.authlete.cbor.CBORSimpleValue;
 import com.authlete.cbor.CBORString;
 import com.authlete.cbor.CBORUndefined;
@@ -111,6 +113,9 @@ class CborUtilTest {
         void acceptsIndefiniteLengthItems() {
             assertThat(CborUtil.decode(raw(0x9f, 0x01, 0x81, 0x02, 0xff), PATH)).isInstanceOf(CBORItemList.class); // [_ 1, [2]]
             assertThat(CborUtil.decode(raw(0x7f, 0x61, 'A', 0x61, 'B', 0xff), PATH)).isInstanceOf(CBORString.class); // (_ "A", "B")
+            // Both ends of the major types (2..5) that may be indefinite-length:
+            assertThat(CborUtil.decode(raw(0x5f, 0x41, 0x01, 0x41, 0x02, 0xff), PATH)).isInstanceOf(CBORByteArray.class); // (_ h'01', h'02')
+            assertThat(CborUtil.decode(raw(0xbf, 0x61, 'a', 0x01, 0xff), PATH)).isInstanceOf(CBORPairList.class);          // {_ "a": 1}
         }
 
         @Test
@@ -129,10 +134,12 @@ class CborUtilTest {
 
         @Test
         void countBeyondTheInputIsMalformed() {
-            assertDecodeError(() -> CborUtil.decode(raw(0x9a, 0x00, 0x01, 0x00, 0x00), PATH), // array of 65 536 items
-                    ErrorCode.CBOR_MALFORMED, PATH);
-            assertDecodeError(() -> CborUtil.decode(raw(0xa2, 0x01, 0x02, 0x03), PATH), // 2 pairs need 4 items, 3 bytes left
-                    ErrorCode.CBOR_MALFORMED, PATH);
+            // The truncation check would reject these too, but later and with a vaguer reason. The exact message
+            // pins the count check itself: it names the lying header at offset 0.
+            assertDecodeError(() -> CborUtil.decode(raw(0x9a, 0x00, 0x01, 0x00, 0x00), PATH), ErrorCode.CBOR_MALFORMED, PATH)
+                    .hasMessage("Malformed CBOR at byte offset 0: array of 65536 items, only 0 bytes left");
+            assertDecodeError(() -> CborUtil.decode(raw(0xa2, 0x01, 0x02, 0x03), PATH), ErrorCode.CBOR_MALFORMED, PATH)
+                    .hasMessage("Malformed CBOR at byte offset 0: map of 2 pairs, only 3 bytes left"); // needs 4 items
         }
 
         @Test
@@ -143,6 +150,7 @@ class CborUtilTest {
         @Test
         void reservedAdditionalInfoIsMalformed() {
             assertDecodeError(() -> CborUtil.decode(raw(0x1c), PATH), ErrorCode.CBOR_MALFORMED, PATH);       // ai 28
+            assertDecodeError(() -> CborUtil.decode(raw(0x3f), PATH), ErrorCode.CBOR_MALFORMED, PATH);       // negative int, ai 31
             assertDecodeError(() -> CborUtil.decode(raw(0xdf, 0x00), PATH), ErrorCode.CBOR_MALFORMED, PATH); // tag, ai 31
         }
 
