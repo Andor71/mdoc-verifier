@@ -129,6 +129,14 @@ class CborUtilTest {
         assertThat(CborUtil.index("$.documents", 2)).isEqualTo("$.documents[2]");
     }
 
+    @Test
+    void bracketKeysAreEscapedLikeJsonPathStringLiterals() {
+        assertThat(CborUtil.child("$", "a\"b")).isEqualTo("$[\"a\\\"b\"]");       // $["a\"b"]
+        assertThat(CborUtil.child("$", "a\\b")).isEqualTo("$[\"a\\\\b\"]");       // $["a\\b"]
+        assertThat(CborUtil.child("$", "a\nb")).isEqualTo("$[\"a\\u000ab\"]");    // newline as a hex escape
+        assertThat(CborUtil.child("$", "név")).isEqualTo("$[\"név\"]");            // non-ASCII stays as it is
+    }
+
     @ParameterizedTest
     @MethodSource("typeNames")
     void typeNameNamesEveryItemType(final CBORItem item, final String expected) {

@@ -238,6 +238,15 @@
 					</execution>
 				</executions>
 			</plugin>
+			<!--
+				*IT classes: integration tests against a running app. Surefire (test phase) skips them, failsafe runs
+				them in integration-test and fails the build in verify. Goals and classesDirectory come from the
+				spring-boot-starter-parent pluginManagement. Run: ./mvnw verify
+			-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-failsafe-plugin</artifactId>
+			</plugin>
 		</plugins>
 	</build>
 

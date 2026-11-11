@@ -118,7 +118,23 @@ public final class CborUtil {
 
     /** {@code $.docType} for plain keys, {@code $["org.iso.18013.5.1"]} for keys with dots, spaces, ... */
     public static String child(final String path, final String key) {
-        return SIMPLE_KEY.matcher(key).matches() ? path + "." + key : path + "[\"" + key + "\"]";
+        return SIMPLE_KEY.matcher(key).matches() ? path + "." + key : path + "[" + quote(key) + "]";
+    }
+
+    // Keys come from the input, so they may hold " or \. Escaped as an RFC 9535 §2.3.1.1 string literal, otherwise
+    // a key like org."x" would close the bracket early. Control characters (not allowed unescaped) become a 4-digit hex escape.
+    private static String quote(final String key) {
+        final StringBuilder quoted = new StringBuilder(key.length() + 2).append('"');
+        key.chars().forEach(c -> {
+            if (c == '"' || c == '\\') {
+                quoted.append('\\').append((char) c);
+            } else if (c < 0x20) {
+                quoted.append(String.format("\\u%04x", c));
+            } else {
+                quoted.append((char) c);
+            }
+        });
+        return quoted.append('"').toString();
     }
 
     public static String index(final String path, final int index) {
