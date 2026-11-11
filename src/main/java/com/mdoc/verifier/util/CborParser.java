@@ -52,6 +52,8 @@ public class CborParser {
         }
     }
 
+    // TODO: later refactor. Still long for what it guards (nesting depth, declared lengths); simplify it or
+    //  take the depth limit from the CBOR library instead (library change: ADR first).
     /**
      * Walks the headers of the item at {@code start} (RFC 8949 §3) without building anything and returns the
      * position after it. Checks that every declared length and count fits in the remaining input, and that
