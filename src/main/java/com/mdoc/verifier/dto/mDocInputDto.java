@@ -15,8 +15,7 @@ public class mDocInputDto {
      */
     public static final int MAX_MDOC_LENGTH = 100_000;
 
-    @NotNull(message = "mdoc field is required")
-    @NotEmpty(message = "mdoc field cannot be empty")
+    @NotEmpty(message = "mdoc field cannot be empty") // rejects null too, so no @NotNull: one message, not two
     @Size(max = MAX_MDOC_LENGTH, message = "mdoc field cannot exceed {max} characters")
     private String mdoc;
 

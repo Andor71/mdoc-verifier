@@ -72,7 +72,9 @@ class DecodeControllerTest {
 
     @Test
     void requestValidationFailsWithBadRequest() throws Exception {
-        postDecode("{\"inputType\":\"HEX\"}").andExpect(status().isBadRequest());
+        postDecode("{\"inputType\":\"HEX\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("Request validation failed: mdoc: mdoc field cannot be empty"));
         postDecode(request("", "HEX")).andExpect(status().isBadRequest());
         postDecode("{\"mdoc\":\"00\"}").andExpect(status().isBadRequest());
         postDecode(request("a".repeat(mDocInputDto.MAX_MDOC_LENGTH + 1), "HEX")).andExpect(status().isBadRequest());
