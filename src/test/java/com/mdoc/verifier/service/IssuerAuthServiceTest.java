@@ -71,15 +71,13 @@ class IssuerAuthServiceTest {
 
         @Test
         void otherTagIsRejected() {
-            assertDecodeError(() -> decode(tag(98, issuerAuth())), ErrorCode.UNEXPECTED_TYPE, PATH)
-                    .hasMessage("Expected array, got tag 98");
+            assertDecodeError(() -> decode(tag(98, issuerAuth())), ErrorCode.UNEXPECTED_TYPE, PATH);
         }
 
         @Test
         void mustBeAnArrayOfFour() {
             assertDecodeError(() -> decode(map()), ErrorCode.UNEXPECTED_TYPE, PATH);
-            assertDecodeError(() -> decode(array(bytes(), map(), msoPayload())), ErrorCode.INVALID_VALUE, PATH)
-                    .hasMessage("COSE_Sign1 must have 4 elements, got 3");
+            assertDecodeError(() -> decode(array(bytes(), map(), msoPayload())), ErrorCode.INVALID_VALUE, PATH);
         }
 
         @Test
@@ -121,15 +119,14 @@ class IssuerAuthServiceTest {
 
         @Test
         void labelMustBeIntOrText() {
-            assertDecodeError(() -> decode(withHeaders(bytes(), map(bytes(0x01), integer(1)))), ErrorCode.UNEXPECTED_TYPE, "$.ia[1]")
-                    .hasMessage("Expected int or text string header label, got byte string");
+            assertDecodeError(() -> decode(withHeaders(bytes(), map(bytes(0x01), integer(1)))), ErrorCode.UNEXPECTED_TYPE, "$.ia[1]");
         }
 
         @Test
         void sameLabelTwiceIsADuplicate() {
             // 1 and "alg" are the same header parameter
             assertDecodeError(() -> decode(withHeaders(bytes(), map(integer(1), integer(-7), text("alg"), integer(-7)))),
-                    ErrorCode.DUPLICATE_KEY, "$.ia[1]");
+                    ErrorCode.DUPLICATE_KEY, "$.ia[1].alg");
         }
 
         @Test
@@ -143,8 +140,7 @@ class IssuerAuthServiceTest {
 
         @Test
         void x5chainMustHoldByteStrings() {
-            assertDecodeError(() -> decode(withHeaders(bytes(), map(integer(33), integer(1)))), ErrorCode.UNEXPECTED_TYPE, "$.ia[1].x5chain")
-                    .hasMessage("Expected byte string or array of byte strings, got integer");
+            assertDecodeError(() -> decode(withHeaders(bytes(), map(integer(33), integer(1)))), ErrorCode.UNEXPECTED_TYPE, "$.ia[1].x5chain");
             assertDecodeError(() -> decode(withHeaders(bytes(), map(integer(33), array(bytes(CERT), text("x"))))),
                     ErrorCode.UNEXPECTED_TYPE, "$.ia[1].x5chain[1]");
         }
@@ -172,16 +168,14 @@ class IssuerAuthServiceTest {
 
         @Test
         void otherTypesAreRejected() {
-            assertDecodeError(() -> decode(issuerAuth(tag(25, bytes(mso().encode())))), ErrorCode.UNEXPECTED_TYPE, PAYLOAD_PATH)
-                    .hasMessage("Expected byte string, got tag 25");
+            assertDecodeError(() -> decode(issuerAuth(tag(25, bytes(mso().encode())))), ErrorCode.UNEXPECTED_TYPE, PAYLOAD_PATH);
             assertDecodeError(() -> decode(issuerAuth(mso())), ErrorCode.UNEXPECTED_TYPE, PAYLOAD_PATH);
         }
 
         @Test
         void bstrMustHoldTag24() {
             // bstr(<<MSO>>) without the tag 24 layer
-            assertDecodeError(() -> decode(issuerAuth(bytes(mso().encode()))), ErrorCode.UNEXPECTED_TYPE, PAYLOAD_PATH)
-                    .hasMessage("Expected tag 24, got map");
+            assertDecodeError(() -> decode(issuerAuth(bytes(mso().encode()))), ErrorCode.UNEXPECTED_TYPE, PAYLOAD_PATH);
         }
 
         @Test

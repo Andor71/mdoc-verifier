@@ -12,11 +12,11 @@ public final class DecodeWarnings {
 
     private final ArrayNode warnings = JsonNodeFactory.instance.arrayNode();
 
-    public void add(final ErrorCode code, final String path, final String message) {
+    public void add(final ErrorCode code, final String path) {
         warnings.addObject()
                 .put("code", code.name())
                 .put("path", path)
-                .put("message", message);
+                .put("message", code.getMessage());
     }
 
     public ArrayNode toJson() {

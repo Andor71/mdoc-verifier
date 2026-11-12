@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
 
-import com.mdoc.verifier.config.LimitProperties;
+import com.mdoc.verifier.config.RateLimitProperties;
 import com.mdoc.verifier.exception.RateLimitExceededException;
 import io.github.bucket4j.TimeMeter;
 import org.junit.jupiter.api.Nested;
@@ -19,8 +19,8 @@ import org.springframework.web.servlet.ModelAndView;
 class RateLimitFilterTest {
 
     /** Burst of 2, then 30 per minute: one token every 2 seconds. */
-    private static final LimitProperties.RateLimit CONFIG =
-            new LimitProperties.RateLimit(2, 30, Duration.ofMinutes(1), 1000, Duration.ofMinutes(10));
+    private static final RateLimitProperties CONFIG =
+            new RateLimitProperties(2, 30, Duration.ofMinutes(1), 1000, Duration.ofMinutes(10));
 
     /** Time only moves when the test says so. */
     private static final class FakeClock implements TimeMeter {

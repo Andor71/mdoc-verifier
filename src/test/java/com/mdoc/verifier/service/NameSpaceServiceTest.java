@@ -68,23 +68,21 @@ class NameSpaceServiceTest {
     @Test
     void itemMustBeTag24() {
         // the IssuerSignedItem map directly, without 24(<<...>>)
-        assertDecodeError(() -> decodeItem(issuerSignedItem(0, "a", text("b"))), ErrorCode.UNEXPECTED_TYPE, ITEM_PATH)
-                .hasMessage("Expected tag 24, got map");
+        assertDecodeError(() -> decodeItem(issuerSignedItem(0, "a", text("b"))), ErrorCode.UNEXPECTED_TYPE, ITEM_PATH);
         assertDecodeError(() -> decodeItem(tag(25, bytes(issuerSignedItem(0, "a", text("b")).encode()))),
                 ErrorCode.UNEXPECTED_TYPE, ITEM_PATH);
     }
 
     @Test
     void tag24MustHoldAByteStringWithOneMap() {
-        assertDecodeError(() -> decodeItem(tag(24, issuerSignedItem(0, "a", text("b")))), ErrorCode.UNEXPECTED_TYPE, ITEM_PATH)
-                .hasMessage("Expected byte string, got map");
+        assertDecodeError(() -> decodeItem(tag(24, issuerSignedItem(0, "a", text("b")))), ErrorCode.UNEXPECTED_TYPE, ITEM_PATH);
         assertDecodeError(() -> decodeItem(tag(24, bytes(raw(0x62, 'A')))), ErrorCode.CBOR_MALFORMED, ITEM_PATH);
         assertDecodeError(() -> decodeItem(embedded(array())), ErrorCode.UNEXPECTED_TYPE, ITEM_PATH);
     }
 
     @Test
     void itemFieldsAreChecked() {
-        assertDecodeError(() -> decodeItem(embedded(textMap("digestID", integer(0)))), ErrorCode.MISSING_FIELD, ITEM_PATH);
+        assertDecodeError(() -> decodeItem(embedded(textMap("digestID", integer(0)))), ErrorCode.MISSING_FIELD, ITEM_PATH + ".random");
         assertDecodeError(() -> decodeItem(embedded(issuerSignedItem(-1, "a", text("b")))),
                 ErrorCode.INVALID_VALUE, ITEM_PATH + ".digestID");
         assertDecodeError(() -> decodeItem(embedded(textMap(

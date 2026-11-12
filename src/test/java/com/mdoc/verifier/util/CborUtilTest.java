@@ -11,23 +11,13 @@ import static com.mdoc.verifier.support.MdocFixtures.assertDecodeError;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigInteger;
-import java.util.stream.Stream;
 
 import com.authlete.cbor.CBORBigInteger;
-import com.authlete.cbor.CBORBoolean;
-import com.authlete.cbor.CBORDouble;
-import com.authlete.cbor.CBORFloat;
 import com.authlete.cbor.CBORItem;
 import com.authlete.cbor.CBORLong;
-import com.authlete.cbor.CBORNull;
-import com.authlete.cbor.CBORSimpleValue;
-import com.authlete.cbor.CBORUndefined;
 import com.mdoc.verifier.enums.ErrorCode;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 
 class CborUtilTest {
 
@@ -47,20 +37,18 @@ class CborUtilTest {
 
         @Test
         void rejectsNonTextKey() {
-            assertDecodeError(() -> CborUtil.textKeyMap(map(integer(1), integer(2)), PATH), ErrorCode.UNEXPECTED_TYPE, PATH)
-                    .hasMessage("Expected text string map key, got integer");
+            assertDecodeError(() -> CborUtil.textKeyMap(map(integer(1), integer(2)), PATH), ErrorCode.UNEXPECTED_TYPE, PATH);
         }
 
         @Test
         void rejectsDuplicateKey() {
             assertDecodeError(() -> CborUtil.textKeyMap(textMap("a", integer(1), "a", integer(2)), PATH),
-                    ErrorCode.DUPLICATE_KEY, PATH);
+                    ErrorCode.DUPLICATE_KEY, PATH + ".a");
         }
 
         @Test
         void rejectsNonMap() {
-            assertDecodeError(() -> CborUtil.textKeyMap(array(), PATH), ErrorCode.UNEXPECTED_TYPE, PATH)
-                    .hasMessage("Expected map, got array");
+            assertDecodeError(() -> CborUtil.textKeyMap(array(), PATH), ErrorCode.UNEXPECTED_TYPE, PATH);
         }
     }
 
@@ -80,10 +68,8 @@ class CborUtilTest {
     void textAndBytesCheckTheType() {
         assertThat(CborUtil.text(text("a"), PATH)).isEqualTo("a");
         assertThat(CborUtil.bytes(bytes(0x01), PATH)).containsExactly(0x01);
-        assertDecodeError(() -> CborUtil.text(bytes(0x01), PATH), ErrorCode.UNEXPECTED_TYPE, PATH)
-                .hasMessage("Expected text string, got byte string");
-        assertDecodeError(() -> CborUtil.bytes(text("a"), PATH), ErrorCode.UNEXPECTED_TYPE, PATH)
-                .hasMessage("Expected byte string, got text string");
+        assertDecodeError(() -> CborUtil.text(bytes(0x01), PATH), ErrorCode.UNEXPECTED_TYPE, PATH);
+        assertDecodeError(() -> CborUtil.bytes(text("a"), PATH), ErrorCode.UNEXPECTED_TYPE, PATH);
     }
 
     @Nested
@@ -115,8 +101,7 @@ class CborUtilTest {
         assertThat(CborUtil.hasTag(bytes(0x01), 24)).isFalse();
         final CBORItem content = text("a");
         assertThat(CborUtil.untag(tag(24, content), 24, PATH)).isSameAs(content); // authlete items have no equals()
-        assertDecodeError(() -> CborUtil.untag(tag(25, text("a")), 24, PATH), ErrorCode.UNEXPECTED_TYPE, PATH)
-                .hasMessage("Expected tag 24, got tag 25");
+        assertDecodeError(() -> CborUtil.untag(tag(25, text("a")), 24, PATH), ErrorCode.UNEXPECTED_TYPE, PATH);
         assertDecodeError(() -> CborUtil.untag(text("a"), 24, PATH), ErrorCode.UNEXPECTED_TYPE, PATH);
     }
 
@@ -137,28 +122,4 @@ class CborUtilTest {
         assertThat(CborUtil.child("$", "név")).isEqualTo("$[\"név\"]");            // non-ASCII stays as it is
     }
 
-    @ParameterizedTest
-    @MethodSource("typeNames")
-    void typeNameNamesEveryItemType(final CBORItem item, final String expected) {
-        assertThat(CborUtil.typeName(item)).isEqualTo(expected);
-    }
-
-    static Stream<Arguments> typeNames() {
-        return Stream.of(
-                Arguments.of(null, "nothing"),
-                Arguments.of(map(), "map"),
-                Arguments.of(array(), "array"),
-                Arguments.of(text("a"), "text string"),
-                Arguments.of(bytes(0x01), "byte string"),
-                Arguments.of(tag(18, array()), "tag 18"),
-                Arguments.of(new CBORDouble(1.5), "float"),
-                Arguments.of(new CBORFloat(1.5f), "float"),
-                Arguments.of(integer(1), "integer"),
-                Arguments.of(new CBORLong(5_000_000_000L), "integer"),
-                Arguments.of(new CBORBigInteger(BigInteger.TWO.pow(70)), "integer"),
-                Arguments.of(CBORBoolean.TRUE, "boolean"),
-                Arguments.of(CBORNull.INSTANCE, "null"),
-                Arguments.of(CBORUndefined.INSTANCE, "undefined"),
-                Arguments.of(new CBORSimpleValue(16), "simple value"));
-    }
 }

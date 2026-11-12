@@ -135,7 +135,6 @@ class DecodeServiceTest {
                 .isInstanceOfSatisfying(MdocDecodeException.class, e -> {
                     assertThat(e.getCode()).isEqualTo(ErrorCode.UNEXPECTED_TYPE);
                     assertThat(e.getPath()).isEqualTo(PAYLOAD_PATH);
-                    assertThat(e.getMessage()).isEqualTo("Expected byte string, got tag 25");
                 });
     }
 
@@ -184,15 +183,14 @@ class DecodeServiceTest {
 
         @Test
         void invalidEncodingIsReportedAtTheRoot() {
-            assertDecodeError(() -> decodeService.decode(input("zz", InputType.HEX)), ErrorCode.INVALID_INPUT_ENCODING, "$")
-                    .hasMessageStartingWith("Input is not valid HEX");
+            assertDecodeError(() -> decodeService.decode(input("zz", InputType.HEX)), ErrorCode.INVALID_INPUT_ENCODING, "$");
         }
 
         @Test
         void rootMustBeAMapWithVersionAndStatus() {
             assertDecodeError(() -> decode(array()), ErrorCode.UNEXPECTED_TYPE, "$");
-            assertDecodeError(() -> decode(textMap("status", integer(0))), ErrorCode.MISSING_FIELD, "$");
-            assertDecodeError(() -> decode(textMap("version", text("1.0"))), ErrorCode.MISSING_FIELD, "$");
+            assertDecodeError(() -> decode(textMap("status", integer(0))), ErrorCode.MISSING_FIELD, "$.version");
+            assertDecodeError(() -> decode(textMap("version", text("1.0"))), ErrorCode.MISSING_FIELD, "$.status");
             assertDecodeError(() -> decode(textMap("version", integer(1), "status", integer(0))), ErrorCode.UNEXPECTED_TYPE, "$.version");
             assertDecodeError(() -> decode(textMap("version", text("1.0"), "status", integer(-1))), ErrorCode.INVALID_VALUE, "$.status");
         }
@@ -210,11 +208,11 @@ class DecodeServiceTest {
             assertDecodeError(() -> decode(deviceResponse(document(), textMap("docType", integer(1)))),
                     ErrorCode.UNEXPECTED_TYPE, "$.documents[1].docType");
             assertDecodeError(() -> decode(deviceResponse(textMap("docType", text(DOC_TYPE)))),
-                    ErrorCode.MISSING_FIELD, "$.documents[0]");
+                    ErrorCode.MISSING_FIELD, "$.documents[0].issuerSigned");
             assertDecodeError(() -> decode(deviceResponse(textMap("docType", text(DOC_TYPE), "issuerSigned", array()))),
                     ErrorCode.UNEXPECTED_TYPE, "$.documents[0].issuerSigned");
             assertDecodeError(() -> decode(deviceResponse(textMap("docType", text(DOC_TYPE), "issuerSigned", textMap()))),
-                    ErrorCode.MISSING_FIELD, "$.documents[0].issuerSigned");
+                    ErrorCode.MISSING_FIELD, "$.documents[0].issuerSigned.issuerAuth");
         }
     }
 

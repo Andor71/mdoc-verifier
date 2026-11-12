@@ -56,7 +56,7 @@ class DecodeControllerTest {
         postDecode(request("0102", "HEX"))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.title").value("mDoc decode failed"))
+                .andExpect(jsonPath("$.title").value("Trailing CBOR data"))
                 .andExpect(jsonPath("$.code").value("CBOR_TRAILING_DATA"))
                 .andExpect(jsonPath("$.path").value("$"))
                 .andExpect(jsonPath("$.detail", not(empty())))
@@ -84,7 +84,7 @@ class DecodeControllerTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.title").value("Invalid request"))
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
-                .andExpect(jsonPath("$.detail").value("mdoc: mdoc field cannot exceed 100000 characters"));
+                .andExpect(jsonPath("$.detail").value("Request validation failed: mdoc: mdoc field cannot exceed 100000 characters"));
     }
 
     @Test

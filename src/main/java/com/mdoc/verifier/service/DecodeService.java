@@ -66,9 +66,8 @@ public class DecodeService {
     private byte[] decodeInput(final mDocInputDto inputDto) {
         try {
             return DecodeUtil.decodeMdocString(inputDto.getMdoc(), inputDto.getInputType());
-        } catch (final IllegalArgumentException e) {
-            throw new MdocDecodeException(ErrorCode.INVALID_INPUT_ENCODING, CborUtil.ROOT,
-                    "Input is not valid " + inputDto.getInputType() + ": " + e.getMessage(), e);
+        } catch (final IllegalArgumentException ignored) {
+            throw new MdocDecodeException(ErrorCode.INVALID_INPUT_ENCODING, CborUtil.ROOT);
         }
     }
 

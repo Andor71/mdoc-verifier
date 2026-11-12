@@ -76,8 +76,7 @@ class DecodeErrorResponseIT {
     private int port;
 
     /** One broken mDoc and the error the frontend must get for it. {@code toString} is the test name. */
-    record Case(String name, String mdoc, InputType inputType, ErrorCode code, String path, String detail,
-                boolean detailIsPrefix) {
+    record Case(String name, String mdoc, InputType inputType, ErrorCode code, String path) {
 
         @Override
         public String toString() {
@@ -85,20 +84,18 @@ class DecodeErrorResponseIT {
         }
     }
 
-    private static Case exact(final String name, final CBORItem mdoc, final ErrorCode code, final String path,
-                              final String detail) {
-        return new Case(name, Cbor.hex(mdoc), InputType.HEX, code, path, detail, false);
+    private static Case exact(final String name, final CBORItem mdoc, final ErrorCode code, final String path) {
+        return new Case(name, Cbor.hex(mdoc), InputType.HEX, code, path);
     }
 
-    private static Case exact(final String name, final String hex, final ErrorCode code, final String path,
-                              final String detail) {
-        return new Case(name, hex, InputType.HEX, code, path, detail, false);
+    private static Case exact(final String name, final String hex, final ErrorCode code, final String path) {
+        return new Case(name, hex, InputType.HEX, code, path);
     }
 
-    /** For messages whose tail comes from the JDK or depends on where the input was cut. */
-    private static Case prefix(final String name, final String mdoc, final InputType inputType, final ErrorCode code,
-                               final String path, final String detailPrefix) {
-        return new Case(name, mdoc, inputType, code, path, detailPrefix, true);
+    /** Input given as text in some encoding, not built from CBOR items. */
+    private static Case encoded(final String name, final String mdoc, final InputType inputType, final ErrorCode code,
+                                final String path) {
+        return new Case(name, mdoc, inputType, code, path);
     }
 
     static Stream<Case> brokenMdocs() throws IOException {
@@ -107,98 +104,91 @@ class DecodeErrorResponseIT {
 
         return Stream.of(
                 // --- Input encoding: nothing decoded yet, so the path is the root ---
-                prefix("odd-length hex", "abc", InputType.HEX,
-                        ErrorCode.INVALID_INPUT_ENCODING, "$", "Input is not valid HEX: "),
-                prefix("non-base64 characters", "@@@@", InputType.BASE64,
-                        ErrorCode.INVALID_INPUT_ENCODING, "$", "Input is not valid BASE64: "),
-                prefix("standard Base64 sent as BASE64_URL", Base64.getEncoder().encodeToString(raw(0xfb, 0xff)),
-                        InputType.BASE64_URL, ErrorCode.INVALID_INPUT_ENCODING, "$", "Input is not valid BASE64_URL: "),
+                encoded("odd-length hex", "abc", InputType.HEX,
+                        ErrorCode.INVALID_INPUT_ENCODING, "$"),
+                encoded("non-base64 characters", "@@@@", InputType.BASE64,
+                        ErrorCode.INVALID_INPUT_ENCODING, "$"),
+                encoded("standard Base64 sent as BASE64_URL", Base64.getEncoder().encodeToString(raw(0xfb, 0xff)),
+                        InputType.BASE64_URL, ErrorCode.INVALID_INPUT_ENCODING, "$"),
 
                 // --- CBOR well-formedness of the outer item ---
-                prefix("real mDL vector cut in half", realMdl.substring(0, realMdl.length() / 2 & ~1), InputType.HEX,
-                        ErrorCode.CBOR_MALFORMED, "$", "Malformed CBOR at byte offset "),
+                encoded("real mDL vector cut in half", realMdl.substring(0, realMdl.length() / 2 & ~1), InputType.HEX,
+                        ErrorCode.CBOR_MALFORMED, "$"),
                 exact("reserved additional information", "1c",
-                        ErrorCode.CBOR_MALFORMED, "$",
-                        "Malformed CBOR at byte offset 0: additional information 28 is not valid for major type 0"),
+                        ErrorCode.CBOR_MALFORMED, "$"),
                 exact("bytes after the DeviceResponse", Cbor.hex(deviceResponse(document())) + "00",
-                        ErrorCode.CBOR_TRAILING_DATA, "$", "Unexpected bytes after the CBOR data item"),
+                        ErrorCode.CBOR_TRAILING_DATA, "$"),
                 exact("33 nested arrays", "81".repeat(33) + "00",
-                        ErrorCode.CBOR_TOO_DEEP, "$", "CBOR nested deeper than 32 levels at byte offset 32"),
+                        ErrorCode.CBOR_TOO_DEEP, "$"),
 
                 // --- DeviceResponse (ISO 18013-5 §8.3.2.1.2.2) ---
                 exact("root is an array", array(),
-                        ErrorCode.UNEXPECTED_TYPE, "$", "Expected map, got array"),
+                        ErrorCode.UNEXPECTED_TYPE, "$"),
                 exact("status missing", textMap("version", text("1.0")),
-                        ErrorCode.MISSING_FIELD, "$", "Missing required field 'status'"),
+                        ErrorCode.MISSING_FIELD, "$.status"),
                 exact("version twice", textMap("version", text("1.0"), "version", text("1.0"), "status", integer(0)),
-                        ErrorCode.DUPLICATE_KEY, "$", "Duplicate map key 'version'"),
+                        ErrorCode.DUPLICATE_KEY, "$.version"),
                 exact("negative status", textMap("version", text("1.0"), "status", integer(-1)),
-                        ErrorCode.INVALID_VALUE, "$.status", "Expected an unsigned integer, got -1"),
+                        ErrorCode.INVALID_VALUE, "$.status"),
                 exact("empty documents", textMap("version", text("1.0"), "documents", array(), "status", integer(0)),
-                        ErrorCode.INVALID_VALUE, "$.documents", "Array must contain at least one element"),
+                        ErrorCode.INVALID_VALUE, "$.documents"),
 
                 // --- Document: the index says which one ---
                 exact("second document's docType is an integer", deviceResponse(document(), textMap("docType", integer(1))),
-                        ErrorCode.UNEXPECTED_TYPE, "$.documents[1].docType", "Expected text string, got integer"),
+                        ErrorCode.UNEXPECTED_TYPE, "$.documents[1].docType"),
                 exact("issuerSigned missing", deviceResponse(textMap("docType", text(DOC_TYPE))),
-                        ErrorCode.MISSING_FIELD, DOC, "Missing required field 'issuerSigned'"),
+                        ErrorCode.MISSING_FIELD, DOC + ".issuerSigned"),
 
                 // --- nameSpaces: IssuerSignedItemBytes = #6.24(bstr .cbor IssuerSignedItem) ---
                 exact("item without the tag-24 wrapper", withItems(issuerSignedItem(0, "given_name", text("Alma"))),
-                        ErrorCode.UNEXPECTED_TYPE, ITEMS + "[0]", "Expected tag 24, got map"),
-                // The offset is inside the embedded bstr, not the whole input: the path says which bstr.
+                        ErrorCode.UNEXPECTED_TYPE, ITEMS + "[0]"),
+                // The path says which embedded bstr is broken.
                 exact("tag-24 bstr holds truncated CBOR", withItems(tag(24, bytes(raw(0x62, 'A')))),
-                        ErrorCode.CBOR_MALFORMED, ITEMS + "[0]",
-                        "Malformed CBOR at byte offset 0: string of 2 bytes, only 1 left"),
+                        ErrorCode.CBOR_MALFORMED, ITEMS + "[0]"),
                 exact("second item's digestID is negative",
                         withItems(validItem, embedded(issuerSignedItem(-1, "family_name", text("Kovács")))),
-                        ErrorCode.INVALID_VALUE, ITEMS + "[1].digestID", "Expected an unsigned integer, got -1"),
+                        ErrorCode.INVALID_VALUE, ITEMS + "[1].digestID"),
                 exact("bad full-date deep inside driving_privileges",
                         withItems(embedded(issuerSignedItem(0, "driving_privileges", array(textMap(
                                 "vehicle_category_code", text("B"),
                                 "issue_date", tag(1004, text("2026-13-01"))))))),
-                        ErrorCode.INVALID_VALUE, ITEMS + "[0].elementValue[0].issue_date",
-                        "'2026-13-01' is not a valid RFC 3339 full-date"),
+                        ErrorCode.INVALID_VALUE, ITEMS + "[0].elementValue[0].issue_date"),
                 exact("elementValue is undefined", withItems(embedded(issuerSignedItem(0, "x", CBORUndefined.INSTANCE))),
-                        ErrorCode.UNSUPPORTED_CBOR, ITEMS + "[0].elementValue", "undefined has no JSON representation"),
+                        ErrorCode.UNSUPPORTED_CBOR, ITEMS + "[0].elementValue"),
                 exact("non-ASCII key twice in elementValue",
                         withItems(embedded(issuerSignedItem(0, "x", textMap("név", text("a"), "név", text("b"))))),
-                        ErrorCode.DUPLICATE_KEY, ITEMS + "[0].elementValue", "Map key 'név' occurs more than once"),
+                        ErrorCode.DUPLICATE_KEY, ITEMS + "[0].elementValue[\"név\"]"),
                 // Keys come from the input. A quote must not end the bracket early: $["org."x""] is no path at all.
                 exact("namespace name with quotes", withNameSpaces(textMap("org.\"x\"", array())),
-                        ErrorCode.INVALID_VALUE, DOC + ".issuerSigned.nameSpaces[\"org.\\\"x\\\"\"]",
-                        "Array must contain at least one element"),
+                        ErrorCode.INVALID_VALUE, DOC + ".issuerSigned.nameSpaces[\"org.\\\"x\\\"\"]"),
 
                 // --- issuerAuth: COSE_Sign1 (RFC 9052 §4.2) ---
                 exact("COSE_Sign1 with 3 elements", withIssuerAuth(array(bytes(), map(), msoPayload())),
-                        ErrorCode.INVALID_VALUE, ISSUER_AUTH, "COSE_Sign1 must have 4 elements, got 3"),
+                        ErrorCode.INVALID_VALUE, ISSUER_AUTH),
                 exact("protected header bstr holds truncated CBOR",
                         withIssuerAuth(array(bytes(raw(0x62, 'A')), map(), msoPayload(), bytes(SIGNATURE))),
-                        ErrorCode.CBOR_MALFORMED, ISSUER_AUTH + "[0]",
-                        "Malformed CBOR at byte offset 0: string of 2 bytes, only 1 left"),
+                        ErrorCode.CBOR_MALFORMED, ISSUER_AUTH + "[0]"),
                 exact("x5chain with a text entry (RFC 9360 §2)", withIssuerAuth(array(
                                 bytes(map(integer(1), integer(-7)).encode()),
                                 map(integer(33), array(bytes(CERT), text("x"))),
                                 msoPayload(), bytes(SIGNATURE))),
-                        ErrorCode.UNEXPECTED_TYPE, ISSUER_AUTH + "[1].x5chain[1]", "Expected byte string, got text string"),
+                        ErrorCode.UNEXPECTED_TYPE, ISSUER_AUTH + "[1].x5chain[1]"),
                 exact("detached payload", withIssuerAuth(issuerAuth(CBORNull.INSTANCE)),
-                        ErrorCode.INVALID_VALUE, ISSUER_AUTH + "[2]", "issuerAuth must not have a detached payload"),
+                        ErrorCode.INVALID_VALUE, ISSUER_AUTH + "[2]"),
                 exact("payload bstr holds the MSO without tag 24", withIssuerAuth(issuerAuth(bytes(mso().encode()))),
-                        ErrorCode.UNEXPECTED_TYPE, ISSUER_AUTH + "[2]", "Expected tag 24, got map"),
+                        ErrorCode.UNEXPECTED_TYPE, ISSUER_AUTH + "[2]"),
 
                 // --- MSO inside payload: the path goes on through the two embedded layers ---
                 exact("validUntil is a full-date, not a tdate", withMsoValidity(textMap(
                                 "signed", tag(0, text("2026-01-01T00:00:00Z")),
                                 "validFrom", tag(0, text("2026-01-01T00:00:00Z")),
                                 "validUntil", tag(0, text("2027-01-01")))),
-                        ErrorCode.INVALID_VALUE, ISSUER_AUTH + "[2].validityInfo.validUntil",
-                        "'2027-01-01' is not a valid RFC 3339 date-time"),
+                        ErrorCode.INVALID_VALUE, ISSUER_AUTH + "[2].validityInfo.validUntil"),
                 exact("signed as epoch time (tag 1)", withMsoValidity(textMap(
                                 "signed", tag(1, integer(1_767_225_600)),
                                 "validFrom", tag(0, text("2026-01-01T00:00:00Z")),
                                 "validUntil", tag(0, text("2027-01-01T00:00:00Z")))),
-                        ErrorCode.UNSUPPORTED_CBOR, ISSUER_AUTH + "[2].validityInfo.signed",
-                        "CBOR tag 1 is not supported"));
+                        ErrorCode.UNSUPPORTED_CBOR, ISSUER_AUTH + "[2].validityInfo.signed"));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -210,7 +200,7 @@ class DecodeErrorResponseIT {
         assertThat(response.statusCode()).as(response.body()).isEqualTo(400);
         assertThat(response.headers().firstValue("Content-Type")).hasValueSatisfying(
                 type -> assertThat(type).startsWith("application/problem+json"));
-        assertThat(body.get("title").asString()).isEqualTo("mDoc decode failed");
+        assertThat(body.get("title").asString()).isEqualTo(c.code().getTitle()); // per code, not part of the frontend contract
         assertThat(body.get("status").asInt()).isEqualTo(400);
 
         // The frontend's guards: typeof code === 'string', typeof path === 'string', typeof detail === 'string'
@@ -220,11 +210,7 @@ class DecodeErrorResponseIT {
 
         assertThat(body.get("code").asString()).isEqualTo(c.code().name());
         assertThat(body.get("path").asString()).isEqualTo(c.path());
-        if (c.detailIsPrefix()) {
-            assertThat(body.get("detail").asString()).startsWith(c.detail());
-        } else {
-            assertThat(body.get("detail").asString()).isEqualTo(c.detail());
-        }
+        assertThat(body.get("detail").asString()).isEqualTo(c.code().getMessage());
         assertThat(body.has("trace")).as("no stack trace").isFalse();
     }
 

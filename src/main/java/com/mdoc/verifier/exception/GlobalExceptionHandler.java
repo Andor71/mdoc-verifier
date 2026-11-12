@@ -21,49 +21,56 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class GlobalExceptionHandler {
 
     private static final String CODE = "code";
+    private static final String PATH = "path";
 
     /** Bad client input: 400 as RFC 9457 problem+json, with code and path, never a stack trace. */
     @ExceptionHandler(MdocDecodeException.class)
     public ProblemDetail handleDecodeFailure(final MdocDecodeException e) {
-        log.info("mDoc decode failed: {} at {}", e.getCode(), e.getPath());
-
-        final ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
-        problem.setTitle("mDoc decode failed");
-        problem.setProperty(CODE, e.getCode().name());
-        problem.setProperty("path", e.getPath());
+        log.info("Request rejected: {} at {}", e.getCode(), e.getPath());
+        final ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, e.getCode(), e.getMessage());
+        problem.setProperty(PATH, e.getPath());
         return problem;
     }
 
     /** Bean Validation on the request DTO failed: 400 naming each field, e.g. "mdoc: ... cannot exceed ...". */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleInvalidRequest(final MethodArgumentNotValidException e) {
-        final String detail = e.getBindingResult().getFieldErrors().stream()
+        final String detail = ErrorCode.INVALID_REQUEST.getMessage() + ": " + e.getBindingResult().getFieldErrors()
+                .stream()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                 .sorted()
                 .collect(Collectors.joining("; "));
-
-        final ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, detail);
-        problem.setTitle("Invalid request");
-        problem.setProperty(CODE, ErrorCode.INVALID_REQUEST.name());
-        return problem;
+        logRejected(ErrorCode.INVALID_REQUEST, detail);
+        return problem(HttpStatus.BAD_REQUEST, ErrorCode.INVALID_REQUEST, detail);
     }
 
     @ExceptionHandler(RequestTooLargeException.class)
     public ProblemDetail handleTooLarge(final RequestTooLargeException e) {
-        final ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONTENT_TOO_LARGE, e.getMessage());
-        problem.setTitle("Request too large");
-        problem.setProperty(CODE, ErrorCode.REQUEST_TOO_LARGE.name());
-        return problem;
+        logRejected(ErrorCode.REQUEST_TOO_LARGE, e.getMessage());
+        return problem(HttpStatus.CONTENT_TOO_LARGE, ErrorCode.REQUEST_TOO_LARGE, e.getMessage());
     }
 
-    /** 429 with Retry-After (RFC 6585 §4, RFC 9110 §10.2.3). Not logged per request: under attack that floods the log. */
+    /**
+     * 429 with Retry-After (RFC 6585 §4, RFC 9110 §10.2.3). Logged like the rest: one line per rejected request,
+     * so a flood shows up in the log as a flood.
+     * The only {@link ResponseEntity} here: a plain {@link ProblemDetail} return value cannot carry a header.
+     */
     @ExceptionHandler(RateLimitExceededException.class)
     public ResponseEntity<ProblemDetail> handleRateLimited(final RateLimitExceededException e) {
-        final ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage());
-        problem.setTitle("Too many requests");
-        problem.setProperty(CODE, ErrorCode.RATE_LIMITED.name());
+        logRejected(ErrorCode.RATE_LIMITED, e.getMessage());
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                 .header(HttpHeaders.RETRY_AFTER, Long.toString(e.getRetryAfterSeconds()))
-                .body(problem);
+                .body(problem(HttpStatus.TOO_MANY_REQUESTS, ErrorCode.RATE_LIMITED, e.getMessage()));
+    }
+
+    private static void logRejected(final ErrorCode code, final String detail) {
+        log.info("Request rejected: {}: {}", code, detail);
+    }
+
+    private static ProblemDetail problem(final HttpStatus status, final ErrorCode code, final String detail) {
+        final ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
+        problem.setTitle(code.getTitle());
+        problem.setProperty(CODE, code.name());
+        return problem;
     }
 }

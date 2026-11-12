@@ -10,8 +10,8 @@ import org.junit.jupiter.api.Test;
 /** A broken limit config must stop the application at startup, never run with a limit silently off. */
 class LimitPropertiesTest {
 
-    private static LimitProperties.RateLimit rateLimit(final int capacity, final Duration idleTimeout) {
-        return new LimitProperties.RateLimit(capacity, 30, Duration.ofMinutes(1), 1000, idleTimeout);
+    private static RateLimitProperties rateLimit(final int capacity, final Duration idleTimeout) {
+        return new RateLimitProperties(capacity, 30, Duration.ofMinutes(1), 1000, idleTimeout);
     }
 
     @Test
@@ -29,19 +29,19 @@ class LimitPropertiesTest {
                 .hasMessageContaining("rate-limit");
         assertThatThrownBy(() -> rateLimit(0, Duration.ofMinutes(10)))
                 .hasMessageContaining("must be positive");
-        assertThatThrownBy(() -> new LimitProperties.RateLimit(10, 0, Duration.ofMinutes(1), 1000, Duration.ofMinutes(10)))
+        assertThatThrownBy(() -> new RateLimitProperties(10, 0, Duration.ofMinutes(1), 1000, Duration.ofMinutes(10)))
                 .hasMessageContaining("must be positive"); // refill-tokens; not a "/ by zero" further down
-        assertThatThrownBy(() -> new LimitProperties.RateLimit(10, 30, Duration.ofMinutes(1), 0, Duration.ofMinutes(10)))
+        assertThatThrownBy(() -> new RateLimitProperties(10, 30, Duration.ofMinutes(1), 0, Duration.ofMinutes(10)))
                 .hasMessageContaining("must be positive"); // max-clients
-        assertThatThrownBy(() -> new LimitProperties.RateLimit(10, 30, null, 1000, Duration.ofMinutes(10)))
+        assertThatThrownBy(() -> new RateLimitProperties(10, 30, null, 1000, Duration.ofMinutes(10)))
                 .hasMessageContaining("refill-period");
-        assertThatThrownBy(() -> new LimitProperties.RateLimit(10, 30, Duration.ofMinutes(1), 1000, null))
+        assertThatThrownBy(() -> new RateLimitProperties(10, 30, Duration.ofMinutes(1), 1000, null))
                 .hasMessageContaining("idle-timeout");
     }
 
     @Test
     void cborDepthMustStayBelowTheCeiling() {
-        final LimitProperties.RateLimit rateLimit = rateLimit(10, Duration.ofMinutes(10));
+        final RateLimitProperties rateLimit = rateLimit(10, Duration.ofMinutes(10));
         final int ceiling = LimitProperties.MAX_CBOR_DEPTH_CEILING;
 
         assertThatCode(() -> new LimitProperties(131072, 1, rateLimit)).doesNotThrowAnyException();

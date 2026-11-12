@@ -27,9 +27,8 @@ class CborMapTest {
     }
 
     @Test
-    void missingFieldIsReportedAtTheMap() {
-        assertDecodeError(() -> map.required("missing"), ErrorCode.MISSING_FIELD, "$.m")
-                .hasMessage("Missing required field 'missing'");
+    void missingFieldIsReportedAtTheKey() {
+        assertDecodeError(() -> map.required("missing"), ErrorCode.MISSING_FIELD, "$.m.missing");
     }
 
     @Test

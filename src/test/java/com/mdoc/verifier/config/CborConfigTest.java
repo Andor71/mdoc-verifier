@@ -17,7 +17,7 @@ class CborConfigTest {
     @Test
     void parserUsesTheConfiguredDepth() {
         final LimitProperties limits = new LimitProperties(1000, 2,
-                new LimitProperties.RateLimit(10, 30, Duration.ofMinutes(1), 1000, Duration.ofMinutes(10)));
+                new RateLimitProperties(10, 30, Duration.ofMinutes(1), 1000, Duration.ofMinutes(10)));
 
         final CborParser parser = new CborConfig().cborParser(limits);
 

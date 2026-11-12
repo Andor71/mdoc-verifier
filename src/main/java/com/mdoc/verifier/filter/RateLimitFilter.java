@@ -9,7 +9,7 @@ import java.util.regex.Pattern;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import com.mdoc.verifier.config.LimitProperties;
+import com.mdoc.verifier.config.RateLimitProperties;
 import com.mdoc.verifier.exception.RateLimitExceededException;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.ConsumptionProbe;
@@ -35,17 +35,17 @@ public class RateLimitFilter extends OncePerRequestFilter {
     /** The characters of an IPv6 literal, ASCII only, starting with a hex digit or ':'. */
     private static final Pattern IPV6_TEXT = Pattern.compile("[0-9A-Fa-f:][0-9A-Fa-f:.]*");
 
-    private final LimitProperties.RateLimit config;
+    private final RateLimitProperties config;
     private final HandlerExceptionResolver exceptionResolver;
     private final TimeMeter clock;
     private final Cache<String, Bucket> buckets;
 
-    public RateLimitFilter(final LimitProperties.RateLimit config, final HandlerExceptionResolver exceptionResolver) {
+    public RateLimitFilter(final RateLimitProperties config, final HandlerExceptionResolver exceptionResolver) {
         this(config, exceptionResolver, TimeMeter.SYSTEM_MILLISECONDS); // Bucket4j's own default for local buckets
     }
 
     /** With a clock of your choice, so a test can move time forward instead of sleeping. */
-    RateLimitFilter(final LimitProperties.RateLimit config, final HandlerExceptionResolver exceptionResolver,
+    RateLimitFilter(final RateLimitProperties config, final HandlerExceptionResolver exceptionResolver,
                     final TimeMeter clock) {
         this.config = config;
         this.exceptionResolver = exceptionResolver;
@@ -77,7 +77,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
         final long retryAfter = Math.max(1, Math.ceilDiv(probe.getNanosToWaitForRefill(), NANOS_PER_SECOND));
         // Filters run outside the DispatcherServlet, so @RestControllerAdvice never sees an exception thrown
         // here. Handing it to the resolver lets GlobalExceptionHandler write the response.
-        if (exceptionResolver.resolveException(request, response, null, new RateLimitExceededException(retryAfter)) == null) {
+        final RateLimitExceededException rejection = new RateLimitExceededException(retryAfter);
+        if (exceptionResolver.resolveException(request, response, null, rejection) == null) {
             response.sendError(HttpStatus.TOO_MANY_REQUESTS.value()); // no handler: still reject, never fall through
         }
     }

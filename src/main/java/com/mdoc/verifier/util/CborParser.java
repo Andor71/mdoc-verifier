@@ -3,7 +3,6 @@ package com.mdoc.verifier.util;
 import java.io.IOException;
 
 import com.authlete.cbor.CBORDecoder;
-import com.authlete.cbor.CBORDecoderException;
 import com.authlete.cbor.CBORDecoderOptions;
 import com.authlete.cbor.CBORItem;
 import com.mdoc.verifier.enums.ErrorCode;
@@ -36,19 +35,17 @@ public class CborParser {
     /** Decodes exactly one CBOR data item (RFC 8949 §5.1); anything after it is an error. */
     public CBORItem decode(final byte[] bytes, final String path) {
         if (bytes.length == 0) {
-            throw new MdocDecodeException(ErrorCode.CBOR_MALFORMED, path, "Empty CBOR input");
+            throw new MdocDecodeException(ErrorCode.CBOR_MALFORMED, path);
         }
         // Before the recursive decoder: depth and declared lengths. The headers alone fix where the item ends.
         final int end = checkStructure(bytes, 0, 0, path);
         if (end != bytes.length) {
-            throw new MdocDecodeException(ErrorCode.CBOR_TRAILING_DATA, path, "Unexpected bytes after the CBOR data item");
+            throw new MdocDecodeException(ErrorCode.CBOR_TRAILING_DATA, path);
         }
         try {
             return new CBORDecoder(bytes, DECODER_OPTIONS).next();
-        } catch (final CBORDecoderException e) {
-            throw malformed(path, e.getOffset(), e.getMessage(), e);
-        } catch (final IOException e) {
-            throw new MdocDecodeException(ErrorCode.CBOR_MALFORMED, path, "Malformed CBOR: " + e.getMessage(), e);
+        } catch (final IOException ignored) { // CBORDecoderException is an IOException too
+            throw new MdocDecodeException(ErrorCode.CBOR_MALFORMED, path);
         }
     }
 
@@ -62,7 +59,7 @@ public class CborParser {
      */
     int checkStructure(final byte[] bytes, final int start, final int depth, final String path) {
         if (start >= bytes.length) {
-            throw malformed(path, start, "input ends inside a data item", null);
+            throw new MdocDecodeException(ErrorCode.CBOR_MALFORMED, path);
         }
         final int initialByte = bytes[start] & 0xff; // & 0xff: a Java byte is signed
         final int major = initialByte >>> 5;         // top 3 bits: the type
@@ -70,25 +67,25 @@ public class CborParser {
         int pos = start + 1;
 
         if (initialByte == BREAK) {
-            throw malformed(path, start, "break outside an indefinite-length item", null);
+            throw new MdocDecodeException(ErrorCode.CBOR_MALFORMED, path);
         }
         // (_ ...) strings, [_ ...] arrays, {_ ...} maps: items until BREAK (RFC 8949 §3.2.2)
         if (ai == AI_INDEFINITE && major >= 2 && major <= 5) {
-            checkDepth(depth, start, path);
+            checkDepth(depth, path);
             while (pos >= bytes.length || (bytes[pos] & 0xff) != BREAK) { // past the end: the call below reports it
                 pos = checkStructure(bytes, pos, depth + 1, path);
             }
             return pos + 1;
         }
         if (ai >= AI_RESERVED) {
-            throw malformed(path, start, "additional information " + ai + " is not valid for major type " + major, null);
+            throw new MdocDecodeException(ErrorCode.CBOR_MALFORMED, path);
         }
 
         long argument = ai;                              // 0..23: the value itself
         if (ai >= AI_ONE_BYTE) {
             final int size = 1 << (ai - AI_ONE_BYTE);    // 24..27 -> 1, 2, 4, 8 bytes follow
             if (size > bytes.length - pos) {
-                throw malformed(path, start, "header argument is truncated", null);
+                throw new MdocDecodeException(ErrorCode.CBOR_MALFORMED, path);
             }
             argument = 0;
             for (int i = 0; i < size; i++) {
@@ -101,8 +98,7 @@ public class CborParser {
             // byte / text string: the argument is the content length; the content is data, skip it
             case 2, 3 -> {
                 if (Long.compareUnsigned(argument, available) > 0) {
-                    throw malformed(path, start, "string of " + Long.toUnsignedString(argument)
-                            + " bytes, only " + available + " left", null);
+                    throw new MdocDecodeException(ErrorCode.CBOR_MALFORMED, path);
                 }
                 yield pos + (int) argument;
             }
@@ -111,10 +107,9 @@ public class CborParser {
             case 4, 5 -> {
                 final boolean array = major == 4;
                 if (Long.compareUnsigned(argument, array ? available : available / 2) > 0) {
-                    throw malformed(path, start, (array ? "array of " : "map of ") + Long.toUnsignedString(argument)
-                            + (array ? " items" : " pairs") + ", only " + available + " bytes left", null);
+                    throw new MdocDecodeException(ErrorCode.CBOR_MALFORMED, path);
                 }
-                checkDepth(depth, start, path);
+                checkDepth(depth, path);
                 final int items = (int) (array ? argument : 2 * argument); // map: key + value
                 for (int i = 0; i < items; i++) {
                     pos = checkStructure(bytes, pos, depth + 1, path);
@@ -123,7 +118,7 @@ public class CborParser {
             }
             // tag: the argument is the tag number; the content is always exactly one item
             case 6 -> {
-                checkDepth(depth, start, path);
+                checkDepth(depth, path);
                 yield checkStructure(bytes, pos, depth + 1, path);
             }
             // 0, 1 integers and 7 float / simple: the argument is the value, no content follows
@@ -132,16 +127,10 @@ public class CborParser {
     }
 
     /** Before every step into a container; this is also what bounds the recursion above. */
-    private void checkDepth(final int depth, final int offset, final String path) {
+    private void checkDepth(final int depth, final String path) {
         if (depth >= maxDepth) {
-            throw new MdocDecodeException(ErrorCode.CBOR_TOO_DEEP, path,
-                    "CBOR nested deeper than " + maxDepth + " levels at byte offset " + offset);
+            throw new MdocDecodeException(ErrorCode.CBOR_TOO_DEEP, path);
         }
     }
 
-    private static MdocDecodeException malformed(final String path, final int offset, final String reason,
-                                                 final Throwable cause) {
-        return new MdocDecodeException(ErrorCode.CBOR_MALFORMED, path,
-                "Malformed CBOR at byte offset " + offset + ": " + reason, cause);
-    }
 }

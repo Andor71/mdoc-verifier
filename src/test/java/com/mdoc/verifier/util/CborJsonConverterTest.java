@@ -79,13 +79,12 @@ class CborJsonConverterTest {
         @Test
         void duplicateKeyAfterConversion() {
             // text "1" and integer 1 both become the JSON key "1"
-            assertDecodeError(() -> json(map(text("1"), integer(1), integer(1), integer(2))), ErrorCode.DUPLICATE_KEY, PATH);
+            assertDecodeError(() -> json(map(text("1"), integer(1), integer(1), integer(2))), ErrorCode.DUPLICATE_KEY, PATH + "[\"1\"]");
         }
 
         @Test
         void keyWithoutJsonForm() {
-            assertDecodeError(() -> json(map(bytes(0x01), integer(1))), ErrorCode.UNSUPPORTED_CBOR, PATH)
-                    .hasMessage("A byte string map key has no JSON representation");
+            assertDecodeError(() -> json(map(bytes(0x01), integer(1))), ErrorCode.UNSUPPORTED_CBOR, PATH);
         }
 
         @Test
@@ -97,22 +96,19 @@ class CborJsonConverterTest {
 
         @Test
         void undefinedAndSimpleValues() {
-            assertDecodeError(() -> json(CBORUndefined.INSTANCE), ErrorCode.UNSUPPORTED_CBOR, PATH)
-                    .hasMessage("undefined has no JSON representation");
+            assertDecodeError(() -> json(CBORUndefined.INSTANCE), ErrorCode.UNSUPPORTED_CBOR, PATH);
             assertDecodeError(() -> json(new CBORSimpleValue(16)), ErrorCode.UNSUPPORTED_CBOR, PATH);
         }
 
         @Test
         void unknownTag() {
-            assertDecodeError(() -> json(tag(37, bytes(0x01))), ErrorCode.UNSUPPORTED_CBOR, PATH)
-                    .hasMessage("CBOR tag 37 is not supported");
+            assertDecodeError(() -> json(tag(37, bytes(0x01))), ErrorCode.UNSUPPORTED_CBOR, PATH);
         }
 
         @Test
         void invalidDates() {
             assertDecodeError(() -> json(tag(0, text("2024-13-01T00:00:00Z"))), ErrorCode.INVALID_VALUE, PATH);
-            assertDecodeError(() -> json(tag(1004, text("17/05/1990"))), ErrorCode.INVALID_VALUE, PATH)
-                    .hasMessage("'17/05/1990' is not a valid RFC 3339 full-date");
+            assertDecodeError(() -> json(tag(1004, text("17/05/1990"))), ErrorCode.INVALID_VALUE, PATH);
         }
 
         @Test

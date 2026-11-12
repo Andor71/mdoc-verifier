@@ -42,7 +42,7 @@ public class NameSpaceService {
     public ObjectNode decode(final CBORItem nameSpaces, final String path) {
         final CborMap byNameSpace = CborUtil.textKeyMap(nameSpaces, path);
         if (byNameSpace.fields().isEmpty()) {
-            throw new MdocDecodeException(ErrorCode.INVALID_VALUE, path, "nameSpaces must contain at least one namespace");
+            throw new MdocDecodeException(ErrorCode.INVALID_VALUE, path);
         }
         final ObjectNode result = JSON.objectNode();
         byNameSpace.fields().forEach((nameSpace, items) ->

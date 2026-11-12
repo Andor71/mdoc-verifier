@@ -53,7 +53,8 @@ public class BodySizeFilter extends OncePerRequestFilter {
     }
 
     private void reject(final HttpServletRequest request, final HttpServletResponse response) throws IOException {
-        if (exceptionResolver.resolveException(request, response, null, new RequestTooLargeException(maxBytes)) == null) {
+        final RequestTooLargeException rejection = new RequestTooLargeException(maxBytes);
+        if (exceptionResolver.resolveException(request, response, null, rejection) == null) {
             response.sendError(HttpStatus.CONTENT_TOO_LARGE.value());
         }
     }
