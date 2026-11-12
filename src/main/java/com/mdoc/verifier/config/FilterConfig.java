@@ -2,6 +2,7 @@ package com.mdoc.verifier.config;
 
 import com.mdoc.verifier.filter.BodySizeFilter;
 import com.mdoc.verifier.filter.RateLimitFilter;
+import io.github.bucket4j.TimeMeter;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -28,8 +29,9 @@ public class FilterConfig {
     public FilterRegistrationBean<RateLimitFilter> rateLimitFilter(
             final LimitProperties limits,
             @Qualifier(MVC_EXCEPTION_RESOLVER) final HandlerExceptionResolver exceptionResolver) {
-        final FilterRegistrationBean<RateLimitFilter> registration =
-                new FilterRegistrationBean<>(new RateLimitFilter(limits.rateLimit(), exceptionResolver));
+        // SYSTEM_MILLISECONDS: Bucket4j's own default for local buckets
+        final FilterRegistrationBean<RateLimitFilter> registration = new FilterRegistrationBean<>(
+                new RateLimitFilter(limits.rateLimit(), exceptionResolver, TimeMeter.SYSTEM_MILLISECONDS));
         registration.setOrder(RATE_LIMIT_ORDER);
         return registration;
     }

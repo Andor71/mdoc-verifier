@@ -94,7 +94,7 @@ class RateLimitFilterTest {
 
     @Test
     void rejectsEvenWhenNoExceptionHandlerWritesTheResponse() throws Exception {
-        final RateLimitFilter filter = new RateLimitFilter(CONFIG, (request, response, handler, e) -> null);
+        final RateLimitFilter filter = new RateLimitFilter(CONFIG, (request, response, handler, e) -> null, new FakeClock());
         final MockHttpServletRequest request = new MockHttpServletRequest("POST", "/decode");
 
         for (int i = 0; i < CONFIG.capacity(); i++) {

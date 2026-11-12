@@ -40,13 +40,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final TimeMeter clock;
     private final Cache<String, Bucket> buckets;
 
-    public RateLimitFilter(final RateLimitProperties config, final HandlerExceptionResolver exceptionResolver) {
-        this(config, exceptionResolver, TimeMeter.SYSTEM_MILLISECONDS); // Bucket4j's own default for local buckets
-    }
-
-    /** With a clock of your choice, so a test can move time forward instead of sleeping. */
-    RateLimitFilter(final RateLimitProperties config, final HandlerExceptionResolver exceptionResolver,
-                    final TimeMeter clock) {
+    /** @param clock refills the buckets; a test passes a fake one to move time forward instead of sleeping */
+    public RateLimitFilter(final RateLimitProperties config, final HandlerExceptionResolver exceptionResolver,
+                           final TimeMeter clock) {
         this.config = config;
         this.exceptionResolver = exceptionResolver;
         this.clock = clock;
