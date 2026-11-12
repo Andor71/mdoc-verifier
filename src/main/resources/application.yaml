@@ -2,4 +2,21 @@ spring:
   application:
     name: mdoc
 
+server:
+  # Behind the ALB: Tomcat's RemoteIpValve takes the client IP from X-Forwarded-For (right to left, skipping
+  # trusted private-range proxies), so request.getRemoteAddr() is the real client and not the ALB.
+  forward-headers-strategy: native
 
+mdoc:
+  limits:
+    # Whole JSON body. Must stay above mDocInputDto.MAX_MDOC_LENGTH plus the JSON around it.
+    max-body-bytes: 131072        # 128 KiB
+    # Arrays, maps and tags nested deeper than this are rejected before the recursive decoder runs (CBOR bomb).
+    # A DeviceResponse needs about 6 levels per decode call (tag-24 contents are decoded separately). 1..256.
+    max-cbor-depth: 32
+    rate-limit:
+      capacity: 10                # burst: 10 requests at once
+      refill-tokens: 30           # then 30 per minute on average (one token every 2 s)
+      refill-period: 1m
+      max-clients: 100000
+      idle-timeout: 10m

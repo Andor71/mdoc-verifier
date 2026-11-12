@@ -1,16 +1,31 @@
 package com.mdoc.verifier.service;
 
+import static com.mdoc.verifier.support.Cbor.array;
+import static com.mdoc.verifier.support.Cbor.integer;
+import static com.mdoc.verifier.support.Cbor.text;
+import static com.mdoc.verifier.support.Cbor.textMap;
+import static com.mdoc.verifier.support.MdocFixtures.DOC_TYPE;
+import static com.mdoc.verifier.support.MdocFixtures.PARSER;
+import static com.mdoc.verifier.support.MdocFixtures.assertDecodeError;
+import static com.mdoc.verifier.support.MdocFixtures.deviceResponse;
+import static com.mdoc.verifier.support.MdocFixtures.document;
+import static com.mdoc.verifier.support.MdocFixtures.hexInput;
+import static com.mdoc.verifier.support.MdocFixtures.input;
+import static com.mdoc.verifier.support.MdocFixtures.issuerAuth;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 
+import com.authlete.cbor.CBORItem;
 import com.mdoc.verifier.dto.mDocInputDto;
 import com.mdoc.verifier.enums.ErrorCode;
 import com.mdoc.verifier.enums.InputType;
 import com.mdoc.verifier.exception.MdocDecodeException;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 
@@ -69,11 +84,11 @@ class DecodeServiceTest {
     // so nothing else changes. Decoding does not check the signature, so this is fine for decode tests.
     private static final String CONFORMANT_SAMPLE = replaceOnce(TAG24_PAYLOAD_SAMPLE, PAYLOAD_HEAD, "590136" + PAYLOAD_HEAD);
 
-    private final DecodeService decodeService = new DecodeService(new NameSpaceService(), new IssuerAuthService());
+    private final DecodeService decodeService = new DecodeService(new NameSpaceService(PARSER), new IssuerAuthService(PARSER), PARSER);
 
     @Test
     void tag24PayloadWithoutBstrIsDecodedWithWarning() {
-        final JsonNode result = decodeService.decode(hexInput(TAG24_PAYLOAD_SAMPLE));
+        final JsonNode result = decodeService.decode(hexText(TAG24_PAYLOAD_SAMPLE));
 
         assertThat(result.at("/documents/0/issuerSigned/issuerAuth/payload/docType").asString())
                 .isEqualTo("com.example.doctype");
@@ -87,7 +102,7 @@ class DecodeServiceTest {
 
     @Test
     void bstrWrappedPayloadHasNoWarning() {
-        final JsonNode result = decodeService.decode(hexInput(CONFORMANT_SAMPLE));
+        final JsonNode result = decodeService.decode(hexText(CONFORMANT_SAMPLE));
 
         assertThat(result.at("/documents/0/issuerSigned/issuerAuth/payload/docType").asString())
                 .isEqualTo("com.example.doctype");
@@ -96,7 +111,7 @@ class DecodeServiceTest {
 
     @Test
     void generatedConformantMdlIsDecodedWithoutWarnings() throws IOException {
-        final JsonNode result = decodeService.decode(hexInput(resource("/vectors/mdl-device-response.hex")));
+        final JsonNode result = decodeService.decode(hexText(resource("/vectors/mdl-device-response.hex")));
 
         final JsonNode items = result.at("/documents/0/issuerSigned/nameSpaces/org.iso.18013.5.1");
         assertThat(items.size()).isEqualTo(11);
@@ -116,15 +131,92 @@ class DecodeServiceTest {
     void payloadWithOtherTagIsRejected() {
         final String tag25Payload = replaceOnce(TAG24_PAYLOAD_SAMPLE, PAYLOAD_HEAD, "d819590131a5");
 
-        assertThatThrownBy(() -> decodeService.decode(hexInput(tag25Payload)))
+        assertThatThrownBy(() -> decodeService.decode(hexText(tag25Payload)))
                 .isInstanceOfSatisfying(MdocDecodeException.class, e -> {
                     assertThat(e.getCode()).isEqualTo(ErrorCode.UNEXPECTED_TYPE);
                     assertThat(e.getPath()).isEqualTo(PAYLOAD_PATH);
-                    assertThat(e.getMessage()).isEqualTo("Expected byte string, got tag 25");
                 });
     }
 
-    private static mDocInputDto hexInput(final String hex) {
+    @Nested
+    class Structure {
+
+        private JsonNode decode(final CBORItem deviceResponse) {
+            return decodeService.decode(hexInput(deviceResponse));
+        }
+
+        @Test
+        void decodesEveryDocument() {
+            final JsonNode result = decode(deviceResponse(document(), document()));
+
+            assertThat(result.get("version").asString()).isEqualTo("1.0");
+            assertThat(result.get("documents").size()).isEqualTo(2);
+            assertThat(result.at("/documents/1/docType").asString()).isEqualTo(DOC_TYPE);
+            assertThat(result.at("/documents/0/issuerSigned/nameSpaces/org.example.ns/0/elementValue").asString()).isEqualTo("Alma");
+            assertThat(result.at("/documents/0/issuerSigned/issuerAuth/payload/docType").asString()).isEqualTo(DOC_TYPE);
+            assertThat(result.get("status").asInt()).isZero();
+        }
+
+        @Test
+        void documentsAndNameSpacesAreOptional() {
+            final JsonNode empty = decode(textMap("version", text("1.0"), "status", integer(10)));
+            assertThat(empty.has("documents")).isFalse();
+            assertThat(empty.get("status").asInt()).isEqualTo(10);
+            assertThat(empty.get("warnings").isEmpty()).isTrue();
+
+            final JsonNode issuerSigned = decode(deviceResponse(
+                    textMap("docType", text(DOC_TYPE), "issuerSigned", textMap("issuerAuth", issuerAuth()))))
+                    .at("/documents/0/issuerSigned");
+            assertThat(issuerSigned.has("nameSpaces")).isFalse();
+            assertThat(issuerSigned.has("issuerAuth")).isTrue();
+        }
+
+        @Test
+        void acceptsBase64AndBase64Url() {
+            final byte[] encoded = deviceResponse(document()).encode();
+
+            assertThat(decodeService.decode(input(Base64.getEncoder().encodeToString(encoded), InputType.BASE64))
+                    .at("/documents/0/docType").asString()).isEqualTo(DOC_TYPE);
+            assertThat(decodeService.decode(input(Base64.getUrlEncoder().withoutPadding().encodeToString(encoded), InputType.BASE64_URL))
+                    .at("/documents/0/docType").asString()).isEqualTo(DOC_TYPE);
+        }
+
+        @Test
+        void invalidEncodingIsReportedAtTheRoot() {
+            assertDecodeError(() -> decodeService.decode(input("zz", InputType.HEX)), ErrorCode.INVALID_INPUT_ENCODING, "$");
+        }
+
+        @Test
+        void rootMustBeAMapWithVersionAndStatus() {
+            assertDecodeError(() -> decode(array()), ErrorCode.UNEXPECTED_TYPE, "$");
+            assertDecodeError(() -> decode(textMap("status", integer(0))), ErrorCode.MISSING_FIELD, "$.version");
+            assertDecodeError(() -> decode(textMap("version", text("1.0"))), ErrorCode.MISSING_FIELD, "$.status");
+            assertDecodeError(() -> decode(textMap("version", integer(1), "status", integer(0))), ErrorCode.UNEXPECTED_TYPE, "$.version");
+            assertDecodeError(() -> decode(textMap("version", text("1.0"), "status", integer(-1))), ErrorCode.INVALID_VALUE, "$.status");
+        }
+
+        @Test
+        void documentsMustBeANonEmptyArray() {
+            assertDecodeError(() -> decode(textMap("version", text("1.0"), "documents", array(), "status", integer(0))),
+                    ErrorCode.INVALID_VALUE, "$.documents");
+            assertDecodeError(() -> decode(textMap("version", text("1.0"), "documents", textMap(), "status", integer(0))),
+                    ErrorCode.UNEXPECTED_TYPE, "$.documents");
+        }
+
+        @Test
+        void documentErrorsCarryTheDocumentIndex() {
+            assertDecodeError(() -> decode(deviceResponse(document(), textMap("docType", integer(1)))),
+                    ErrorCode.UNEXPECTED_TYPE, "$.documents[1].docType");
+            assertDecodeError(() -> decode(deviceResponse(textMap("docType", text(DOC_TYPE)))),
+                    ErrorCode.MISSING_FIELD, "$.documents[0].issuerSigned");
+            assertDecodeError(() -> decode(deviceResponse(textMap("docType", text(DOC_TYPE), "issuerSigned", array()))),
+                    ErrorCode.UNEXPECTED_TYPE, "$.documents[0].issuerSigned");
+            assertDecodeError(() -> decode(deviceResponse(textMap("docType", text(DOC_TYPE), "issuerSigned", textMap()))),
+                    ErrorCode.MISSING_FIELD, "$.documents[0].issuerSigned.issuerAuth");
+        }
+    }
+
+    private static mDocInputDto hexText(final String hex) {
         final mDocInputDto input = new mDocInputDto();
         input.setMdoc(hex);
         input.setInputType(InputType.HEX);

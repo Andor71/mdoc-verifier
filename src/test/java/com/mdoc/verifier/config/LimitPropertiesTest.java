@@ -1,0 +1,62 @@
+package com.mdoc.verifier.config;
+
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.time.Duration;
+
+import org.junit.jupiter.api.Test;
+
+/** A broken limit config must stop the application at startup, never run with a limit silently off. */
+class LimitPropertiesTest {
+
+    private static RateLimitProperties rateLimit(final int capacity, final Duration idleTimeout) {
+        return new RateLimitProperties(capacity, 30, Duration.ofMinutes(1), 1000, idleTimeout);
+    }
+
+    @Test
+    void acceptsTheShippedValues() {
+        assertThatCode(() -> new LimitProperties(131072, 32, rateLimit(10, Duration.ofMinutes(10))))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void rejectsMissingOrNonPositiveValues() {
+        // A property left out of the yaml binds as 0 or null.
+        assertThatThrownBy(() -> new LimitProperties(0, 32, rateLimit(10, Duration.ofMinutes(10))))
+                .hasMessageContaining("max-body-bytes");
+        assertThatThrownBy(() -> new LimitProperties(131072, 32, null))
+                .hasMessageContaining("rate-limit");
+        assertThatThrownBy(() -> rateLimit(0, Duration.ofMinutes(10)))
+                .hasMessageContaining("must be positive");
+        assertThatThrownBy(() -> new RateLimitProperties(10, 0, Duration.ofMinutes(1), 1000, Duration.ofMinutes(10)))
+                .hasMessageContaining("must be positive"); // refill-tokens; not a "/ by zero" further down
+        assertThatThrownBy(() -> new RateLimitProperties(10, 30, Duration.ofMinutes(1), 0, Duration.ofMinutes(10)))
+                .hasMessageContaining("must be positive"); // max-clients
+        assertThatThrownBy(() -> new RateLimitProperties(10, 30, null, 1000, Duration.ofMinutes(10)))
+                .hasMessageContaining("refill-period");
+        assertThatThrownBy(() -> new RateLimitProperties(10, 30, Duration.ofMinutes(1), 1000, null))
+                .hasMessageContaining("idle-timeout");
+    }
+
+    @Test
+    void cborDepthMustStayBelowTheCeiling() {
+        final RateLimitProperties rateLimit = rateLimit(10, Duration.ofMinutes(10));
+        final int ceiling = LimitProperties.MAX_CBOR_DEPTH_CEILING;
+
+        assertThatCode(() -> new LimitProperties(131072, 1, rateLimit)).doesNotThrowAnyException();
+        assertThatCode(() -> new LimitProperties(131072, ceiling, rateLimit)).doesNotThrowAnyException();
+        assertThatThrownBy(() -> new LimitProperties(131072, 0, rateLimit))
+                .hasMessage("mdoc.limits.max-cbor-depth must be between 1 and 256"); // also: left out of the yaml
+        assertThatThrownBy(() -> new LimitProperties(131072, ceiling + 1, rateLimit))
+                .hasMessage("mdoc.limits.max-cbor-depth must be between 1 and 256");
+    }
+
+    @Test
+    void idleTimeoutMustCoverAFullRefill() {
+        // 10 tokens at 30 per minute: an empty bucket is full again after 20 s.
+        assertThatCode(() -> rateLimit(10, Duration.ofSeconds(20))).doesNotThrowAnyException();
+        assertThatThrownBy(() -> rateLimit(10, Duration.ofSeconds(19)))
+                .hasMessageContaining("idle-timeout must be at least PT20S");
+    }
+}

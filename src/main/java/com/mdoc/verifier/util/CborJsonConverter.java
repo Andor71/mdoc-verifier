@@ -59,8 +59,7 @@ public final class CborJsonConverter {
             case CBORBoolean bool -> JSON.booleanNode(bool.getValue());
             case CBORNull nil -> JSON.nullNode();
             case CBORTaggedItem tagged -> taggedToJson(tagged, path);
-            default -> throw new MdocDecodeException(ErrorCode.UNSUPPORTED_CBOR, path,
-                    CborUtil.typeName(item) + " has no JSON representation");
+            default -> throw new MdocDecodeException(ErrorCode.UNSUPPORTED_CBOR, path);
         };
     }
 
@@ -74,7 +73,7 @@ public final class CborJsonConverter {
         for (final CBORPair pair : map.getPairs()) {
             final String key = jsonKey(pair.getKey(), path);
             if (node.has(key)) {
-                throw new MdocDecodeException(ErrorCode.DUPLICATE_KEY, path, "Map key '" + key + "' occurs more than once");
+                throw new MdocDecodeException(ErrorCode.DUPLICATE_KEY, CborUtil.child(path, key));
             }
             node.set(key, toJson(pair.getValue(), CborUtil.child(path, key)));
         }
@@ -88,8 +87,7 @@ public final class CborJsonConverter {
             case CBORInteger number -> number.getValue().toString();
             case CBORLong number -> number.getValue().toString();
             case CBORBigInteger number -> number.getValue().toString();
-            default -> throw new MdocDecodeException(ErrorCode.UNSUPPORTED_CBOR, path,
-                    "A " + CborUtil.typeName(key) + " map key has no JSON representation");
+            default -> throw new MdocDecodeException(ErrorCode.UNSUPPORTED_CBOR, path);
         };
     }
 
@@ -104,7 +102,7 @@ public final class CborJsonConverter {
 
     private static JsonNode floatToJson(final double value, final String path) {
         if (Double.isNaN(value) || Double.isInfinite(value)) {
-            throw new MdocDecodeException(ErrorCode.UNSUPPORTED_CBOR, path, "NaN and Infinity have no JSON representation");
+            throw new MdocDecodeException(ErrorCode.UNSUPPORTED_CBOR, path);
         }
         return JSON.numberNode(value);
     }
@@ -113,10 +111,10 @@ public final class CborJsonConverter {
         final long tag = tagged.getTagNumber().longValue();
         final CBORItem content = tagged.getTagContent();
         if (tag == TAG_TDATE) {
-            return dateToJson(content, path, OffsetDateTime::parse, "RFC 3339 date-time");
+            return dateToJson(content, path, OffsetDateTime::parse);
         }
         if (tag == TAG_FULL_DATE) {
-            return dateToJson(content, path, LocalDate::parse, "RFC 3339 full-date");
+            return dateToJson(content, path, LocalDate::parse);
         }
         if (tag == TAG_POSITIVE_BIGNUM) {
             return JSON.numberNode(new BigInteger(1, CborUtil.bytes(content, path)));
@@ -124,17 +122,16 @@ public final class CborJsonConverter {
         if (tag == TAG_NEGATIVE_BIGNUM) {
             return JSON.numberNode(BigInteger.ONE.negate().subtract(new BigInteger(1, CborUtil.bytes(content, path))));
         }
-        throw new MdocDecodeException(ErrorCode.UNSUPPORTED_CBOR, path, "CBOR tag " + tagged.getTagNumber() + " is not supported");
+        throw new MdocDecodeException(ErrorCode.UNSUPPORTED_CBOR, path);
     }
 
     // The JSON keeps the original text; parsing only checks that it is well-formed.
-    private static JsonNode dateToJson(final CBORItem content, final String path, final Consumer<String> parser,
-                                       final String format) {
+    private static JsonNode dateToJson(final CBORItem content, final String path, final Consumer<String> parser) {
         final String value = CborUtil.text(content, path);
         try {
             parser.accept(value);
-        } catch (final DateTimeParseException e) {
-            throw new MdocDecodeException(ErrorCode.INVALID_VALUE, path, "'" + value + "' is not a valid " + format, e);
+        } catch (final DateTimeParseException ignored) {
+            throw new MdocDecodeException(ErrorCode.INVALID_VALUE, path);
         }
         return JSON.stringNode(value);
     }

@@ -28,6 +28,8 @@
 	</scm>
 	<properties>
 		<java.version>21</java.version>
+		<!-- Filled by jacoco:prepare-agent; empty when JaCoCo is skipped, so @{jacocoArgLine} still resolves -->
+		<jacocoArgLine/>
 	</properties>
 	<dependencies>
 
@@ -47,6 +49,12 @@
 			<scope>test</scope>
 		</dependency>
 		<dependency>
+			<!-- PIT's JUnit 5 plugin runs the tests through the project's own launcher (version from the JUnit BOM) -->
+			<groupId>org.junit.platform</groupId>
+			<artifactId>junit-platform-launcher</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
@@ -59,6 +67,17 @@
 			<version>1.21</version>
 		</dependency>
 
+		<!--	Request limits	-->
+		<dependency>
+			<groupId>com.bucket4j</groupId>
+			<artifactId>bucket4j_jdk17-core</artifactId>
+			<version>8.21.0</version>
+		</dependency>
+		<dependency>
+			<groupId>com.github.ben-manes.caffeine</groupId>
+			<artifactId>caffeine</artifactId>
+		</dependency>
+
 	</dependencies>
 
 	<build>
@@ -66,6 +85,122 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<!-- @{...}: resolved when the tests start, after prepare-agent has set it -->
+					<argLine>@{jacocoArgLine}</argLine>
+				</configuration>
+			</plugin>
+			<!--
+				Line and branch coverage. prepare-agent puts the JaCoCo agent into surefire's argLine, the tests record
+				which code ran, report turns that into target/site/jacoco/ (index.html, jacoco.xml, jacoco.csv) during
+				verify, and check fails the build below the minimums.
+			-->
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>0.8.16</version>
+				<configuration>
+					<excludes>
+						<!-- same exclusions as PIT: main() and Lombok data holders -->
+						<exclude>com/mdoc/verifier/MdocApplication.class</exclude>
+						<exclude>com/mdoc/verifier/dto/**</exclude>
+					</excludes>
+				</configuration>
+				<executions>
+					<execution>
+						<id>prepare-agent</id>
+						<goals>
+							<goal>prepare-agent</goal>
+						</goals>
+						<configuration>
+							<!-- Not the default "argLine": PIT reads that property too and would run every mutant
+							     with the JaCoCo agent on top of its own. Surefire picks this one up by name below. -->
+							<propertyName>jacocoArgLine</propertyName>
+						</configuration>
+					</execution>
+					<execution>
+						<id>report</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>report</goal>
+						</goals>
+					</execution>
+					<execution>
+						<!-- After report (same phase, declared later). 98.8% lines / 99.6% branches today; the slack is
+						     for unreachable defensive code, e.g. catch blocks for IOExceptions a byte array never throws. -->
+						<id>check</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>check</goal>
+						</goals>
+						<configuration>
+							<rules>
+								<rule>
+									<element>BUNDLE</element>
+									<limits>
+										<limit>
+											<counter>LINE</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>0.90</minimum>
+										</limit>
+										<limit>
+											<counter>BRANCH</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>0.85</minimum>
+										</limit>
+									</limits>
+								</rule>
+							</rules>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+			<!--
+				Mutation testing: PIT changes the compiled code one small step at a time (a > becomes >=, a return
+				value becomes null, a call is removed, ...) and runs the tests covering that line against each mutant.
+				A mutant the tests do not notice ("survived") is behaviour no test pins down.
+				Not bound to a phase, so the normal build stays fast. Run: ./mvnw test-compile pitest:mutationCoverage
+				Report: target/pit-reports/index.html
+			-->
+			<plugin>
+				<groupId>org.pitest</groupId>
+				<artifactId>pitest-maven</artifactId>
+				<version>1.30.1</version>
+				<dependencies>
+					<dependency>
+						<groupId>org.pitest</groupId>
+						<artifactId>pitest-junit5-plugin</artifactId>
+						<version>1.2.3</version>
+					</dependency>
+				</dependencies>
+				<configuration>
+					<targetClasses>
+						<param>com.mdoc.verifier.*</param>
+					</targetClasses>
+					<targetTests>
+						<param>com.mdoc.verifier.*</param>
+					</targetTests>
+					<excludedClasses>
+						<!-- main() and Lombok data holders: no logic, only generated getters/equals to mutate -->
+						<param>com.mdoc.verifier.MdocApplication</param>
+						<param>com.mdoc.verifier.dto.*</param>
+					</excludedClasses>
+					<threads>4</threads>
+					<!-- Surefire's argLine carries the JaCoCo agent; PIT measures coverage itself and must not inherit it -->
+					<parseSurefireArgLine>false</parseSurefireArgLine>
+					<!-- Fails the run below this score. 100% today; the slack is for equivalent mutants in future code
+					     (a change no test can observe because the behaviour stays the same). -->
+					<mutationThreshold>90</mutationThreshold>
+					<timestampedReports>false</timestampedReports>
+					<outputFormats>
+						<param>HTML</param>
+						<param>XML</param>
+					</outputFormats>
+				</configuration>
 			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
@@ -102,6 +237,15 @@
 						</configuration>
 					</execution>
 				</executions>
+			</plugin>
+			<!--
+				*IT classes: integration tests against a running app. Surefire (test phase) skips them, failsafe runs
+				them in integration-test and fails the build in verify. Goals and classesDirectory come from the
+				spring-boot-starter-parent pluginManagement. Run: ./mvnw verify
+			-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-failsafe-plugin</artifactId>
 			</plugin>
 		</plugins>
 	</build>

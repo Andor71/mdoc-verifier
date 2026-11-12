@@ -1,6 +1,5 @@
 package com.mdoc.verifier.util;
 
-import java.io.IOException;
 import java.math.BigInteger;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -9,70 +8,30 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 import com.authlete.cbor.CBORBigInteger;
-import com.authlete.cbor.CBORBoolean;
 import com.authlete.cbor.CBORByteArray;
-import com.authlete.cbor.CBORDecoder;
-import com.authlete.cbor.CBORDecoderException;
-import com.authlete.cbor.CBORDecoderOptions;
-import com.authlete.cbor.CBORDouble;
-import com.authlete.cbor.CBORFloat;
 import com.authlete.cbor.CBORInteger;
 import com.authlete.cbor.CBORItem;
 import com.authlete.cbor.CBORItemList;
 import com.authlete.cbor.CBORLong;
-import com.authlete.cbor.CBORNull;
 import com.authlete.cbor.CBORPair;
 import com.authlete.cbor.CBORPairList;
 import com.authlete.cbor.CBORString;
 import com.authlete.cbor.CBORTaggedItem;
-import com.authlete.cbor.CBORUndefined;
 import com.mdoc.verifier.enums.ErrorCode;
 import com.mdoc.verifier.exception.MdocDecodeException;
 
 /**
  * Typed access to authlete CBOR items. Every method takes the item's location in the input
  * (JSONPath-like) and throws {@link MdocDecodeException} with that location when the type is wrong.
+ * Bytes to items: {@link CborParser}.
  */
 public final class CborUtil {
 
     public static final String ROOT = "$";
 
-    // No tag processors: every tag (0, 24, 1004, 18, ...) stays a CBORTaggedItem, so our code decides
-    // what each tag means. The library default would e.g. turn tag 18 into a COSE object behind our back.
-    private static final CBORDecoderOptions DECODER_OPTIONS = new CBORDecoderOptions();
-
     private static final Pattern SIMPLE_KEY = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
 
     private CborUtil() {
-    }
-
-    /** Decodes exactly one CBOR data item (RFC 8949 §5.1); anything after it is an error. */
-    public static CBORItem decode(final byte[] bytes, final String path) {
-        final CBORDecoder decoder = new CBORDecoder(bytes, DECODER_OPTIONS);
-        final CBORItem item;
-        try {
-            item = decoder.next();
-        } catch (final CBORDecoderException e) {
-            throw new MdocDecodeException(ErrorCode.CBOR_MALFORMED, path,
-                    "Malformed CBOR at byte offset " + e.getOffset() + ": " + e.getMessage(), e);
-        } catch (final IOException e) {
-            throw new MdocDecodeException(ErrorCode.CBOR_MALFORMED, path, "Malformed CBOR: " + e.getMessage(), e);
-        }
-        if (item == null) {
-            throw new MdocDecodeException(ErrorCode.CBOR_MALFORMED, path, "Empty CBOR input");
-        }
-        if (hasMoreData(decoder)) {
-            throw new MdocDecodeException(ErrorCode.CBOR_TRAILING_DATA, path, "Unexpected bytes after the CBOR data item");
-        }
-        return item;
-    }
-
-    private static boolean hasMoreData(final CBORDecoder decoder) {
-        try {
-            return decoder.next() != null;
-        } catch (final IOException e) {
-            return true; // leftover bytes that are not even valid CBOR
-        }
     }
 
     /** A map whose keys must all be text strings, without duplicates. */
@@ -80,10 +39,10 @@ public final class CborUtil {
         final Map<String, CBORItem> fields = new LinkedHashMap<>();
         for (final CBORPair pair : pairs(item, path)) {
             if (!(pair.getKey() instanceof CBORString key)) {
-                throw typeError(path, "text string map key", pair.getKey());
+                throw typeError(path);
             }
             if (fields.putIfAbsent(key.getValue(), pair.getValue()) != null) {
-                throw new MdocDecodeException(ErrorCode.DUPLICATE_KEY, path, "Duplicate map key '" + key.getValue() + "'");
+                throw new MdocDecodeException(ErrorCode.DUPLICATE_KEY, child(path, key.getValue()));
             }
         }
         return new CborMap(Collections.unmodifiableMap(fields), path);
@@ -93,21 +52,21 @@ public final class CborUtil {
         if (item instanceof CBORPairList map) {
             return map.getPairs();
         }
-        throw typeError(path, "map", item);
+        throw typeError(path);
     }
 
     public static List<? extends CBORItem> array(final CBORItem item, final String path) {
         if (item instanceof CBORItemList list) {
             return list.getItems();
         }
-        throw typeError(path, "array", item);
+        throw typeError(path);
     }
 
     /** For CDDL {@code [+ X]}: at least one element. */
     public static List<? extends CBORItem> nonEmptyArray(final CBORItem item, final String path) {
         final List<? extends CBORItem> items = array(item, path);
         if (items.isEmpty()) {
-            throw new MdocDecodeException(ErrorCode.INVALID_VALUE, path, "Array must contain at least one element");
+            throw new MdocDecodeException(ErrorCode.INVALID_VALUE, path);
         }
         return items;
     }
@@ -116,14 +75,14 @@ public final class CborUtil {
         if (item instanceof CBORString text) {
             return text.getValue();
         }
-        throw typeError(path, "text string", item);
+        throw typeError(path);
     }
 
     public static byte[] bytes(final CBORItem item, final String path) {
         if (item instanceof CBORByteArray bytes) {
             return bytes.getValue();
         }
-        throw typeError(path, "byte string", item);
+        throw typeError(path);
     }
 
     /** CDDL {@code uint}: a non-negative integer. */
@@ -132,10 +91,10 @@ public final class CborUtil {
             case CBORInteger number -> BigInteger.valueOf(number.getValue());
             case CBORLong number -> BigInteger.valueOf(number.getValue());
             case CBORBigInteger number -> number.getValue();
-            default -> throw typeError(path, "unsigned integer", item);
+            default -> throw typeError(path);
         };
         if (value.signum() < 0) {
-            throw new MdocDecodeException(ErrorCode.INVALID_VALUE, path, "Expected an unsigned integer, got " + value);
+            throw new MdocDecodeException(ErrorCode.INVALID_VALUE, path);
         }
         return value;
     }
@@ -149,39 +108,36 @@ public final class CborUtil {
         if (hasTag(item, tag)) {
             return ((CBORTaggedItem) item).getTagContent();
         }
-        throw typeError(path, "tag " + tag, item);
+        throw typeError(path);
     }
 
     /** {@code $.docType} for plain keys, {@code $["org.iso.18013.5.1"]} for keys with dots, spaces, ... */
     public static String child(final String path, final String key) {
-        return SIMPLE_KEY.matcher(key).matches() ? path + "." + key : path + "[\"" + key + "\"]";
+        return SIMPLE_KEY.matcher(key).matches() ? path + "." + key : path + "[" + quote(key) + "]";
+    }
+
+    // Keys come from the input, so they may hold " or \. Escaped as an RFC 9535 §2.3.1.1 string literal, otherwise
+    // a key like org."x" would close the bracket early. Control characters (not allowed unescaped) become a 4-digit hex escape.
+    private static String quote(final String key) {
+        final StringBuilder quoted = new StringBuilder(key.length() + 2).append('"');
+        key.chars().forEach(c -> {
+            if (c == '"' || c == '\\') {
+                quoted.append('\\').append((char) c);
+            } else if (c < 0x20) {
+                quoted.append(String.format("\\u%04x", c));
+            } else {
+                quoted.append((char) c);
+            }
+        });
+        return quoted.append('"').toString();
     }
 
     public static String index(final String path, final int index) {
         return path + "[" + index + "]";
     }
 
-    public static MdocDecodeException typeError(final String path, final String expected, final CBORItem actual) {
-        return new MdocDecodeException(ErrorCode.UNEXPECTED_TYPE, path, "Expected " + expected + ", got " + typeName(actual));
+    public static MdocDecodeException typeError(final String path) {
+        return new MdocDecodeException(ErrorCode.UNEXPECTED_TYPE, path);
     }
 
-    public static String typeName(final CBORItem item) {
-        return switch (item) {
-            case null -> "nothing";
-            case CBORPairList map -> "map";
-            case CBORItemList list -> "array";
-            case CBORString text -> "text string";
-            case CBORByteArray bytes -> "byte string";
-            case CBORTaggedItem tagged -> "tag " + tagged.getTagNumber();
-            case CBORDouble number -> "float";
-            case CBORFloat number -> "float";
-            case CBORInteger number -> "integer";
-            case CBORLong number -> "integer";
-            case CBORBigInteger number -> "integer";
-            case CBORBoolean bool -> "boolean";
-            case CBORNull nil -> "null";
-            case CBORUndefined undefined -> "undefined";
-            default -> "simple value";
-        };
-    }
 }

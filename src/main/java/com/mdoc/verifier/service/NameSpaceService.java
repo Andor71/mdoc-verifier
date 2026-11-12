@@ -7,7 +7,9 @@ import com.mdoc.verifier.enums.ErrorCode;
 import com.mdoc.verifier.exception.MdocDecodeException;
 import com.mdoc.verifier.util.CborJsonConverter;
 import com.mdoc.verifier.util.CborMap;
+import com.mdoc.verifier.util.CborParser;
 import com.mdoc.verifier.util.CborUtil;
+import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.JsonNodeFactory;
@@ -23,6 +25,7 @@ import tools.jackson.databind.node.ObjectNode;
  * Generic: which elements a namespace should hold (e.g. mDL) is not checked, only the types.
  */
 @Service
+@AllArgsConstructor
 public class NameSpaceService {
 
     private static final long TAG_ENCODED_CBOR = 24; // RFC 8949 §3.4.5.1
@@ -34,10 +37,12 @@ public class NameSpaceService {
 
     private static final JsonNodeFactory JSON = JsonNodeFactory.instance;
 
+    private final CborParser cborParser;
+
     public ObjectNode decode(final CBORItem nameSpaces, final String path) {
         final CborMap byNameSpace = CborUtil.textKeyMap(nameSpaces, path);
         if (byNameSpace.fields().isEmpty()) {
-            throw new MdocDecodeException(ErrorCode.INVALID_VALUE, path, "nameSpaces must contain at least one namespace");
+            throw new MdocDecodeException(ErrorCode.INVALID_VALUE, path);
         }
         final ObjectNode result = JSON.objectNode();
         byNameSpace.fields().forEach((nameSpace, items) ->
@@ -57,7 +62,7 @@ public class NameSpaceService {
     private ObjectNode decodeItem(final CBORItem itemBytes, final String path) {
         // Two layers: tag 24 wraps a bstr, and the bstr holds the encoded IssuerSignedItem.
         final byte[] encodedItem = CborUtil.bytes(CborUtil.untag(itemBytes, TAG_ENCODED_CBOR, path), path);
-        final CborMap item = CborUtil.textKeyMap(CborUtil.decode(encodedItem, path), path);
+        final CborMap item = CborUtil.textKeyMap(cborParser.decode(encodedItem, path), path);
 
         final ObjectNode result = JSON.objectNode();
         result.set(DIGEST_ID_KEY, JSON.numberNode(item.uint(DIGEST_ID_KEY)));

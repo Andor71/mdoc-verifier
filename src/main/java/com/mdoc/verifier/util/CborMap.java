@@ -20,7 +20,7 @@ public record CborMap(Map<String, CBORItem> fields, String path) {
     public CBORItem required(final String key) {
         final CBORItem value = fields.get(key);
         if (value == null) {
-            throw new MdocDecodeException(ErrorCode.MISSING_FIELD, path, "Missing required field '" + key + "'");
+            throw new MdocDecodeException(ErrorCode.MISSING_FIELD, pathOf(key));
         }
         return value;
     }

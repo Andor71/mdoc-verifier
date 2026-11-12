@@ -7,6 +7,7 @@ import com.mdoc.verifier.dto.mDocInputDto;
 import com.mdoc.verifier.enums.ErrorCode;
 import com.mdoc.verifier.exception.MdocDecodeException;
 import com.mdoc.verifier.util.CborMap;
+import com.mdoc.verifier.util.CborParser;
 import com.mdoc.verifier.util.CborUtil;
 import com.mdoc.verifier.util.DecodeUtil;
 import com.mdoc.verifier.util.DecodeWarnings;
@@ -44,9 +45,10 @@ public class DecodeService {
 
     private final NameSpaceService nameSpaceService;
     private final IssuerAuthService issuerAuthService;
+    private final CborParser cborParser;
 
     public JsonNode decode(final mDocInputDto inputDto) {
-        final CBORItem root =CborUtil.decode(decodeInput(inputDto), CborUtil.ROOT);
+        final CBORItem root = cborParser.decode(decodeInput(inputDto), CborUtil.ROOT);
         final CborMap deviceResponse = CborUtil.textKeyMap(root, CborUtil.ROOT);
         final DecodeWarnings warnings = new DecodeWarnings();
 
@@ -64,9 +66,8 @@ public class DecodeService {
     private byte[] decodeInput(final mDocInputDto inputDto) {
         try {
             return DecodeUtil.decodeMdocString(inputDto.getMdoc(), inputDto.getInputType());
-        } catch (final IllegalArgumentException e) {
-            throw new MdocDecodeException(ErrorCode.INVALID_INPUT_ENCODING, CborUtil.ROOT,
-                    "Input is not valid " + inputDto.getInputType() + ": " + e.getMessage(), e);
+        } catch (final IllegalArgumentException ignored) {
+            throw new MdocDecodeException(ErrorCode.INVALID_INPUT_ENCODING, CborUtil.ROOT);
         }
     }
 

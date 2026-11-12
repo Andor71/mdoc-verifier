@@ -15,8 +15,10 @@ import com.authlete.cbor.CBORTaggedItem;
 import com.mdoc.verifier.enums.ErrorCode;
 import com.mdoc.verifier.exception.MdocDecodeException;
 import com.mdoc.verifier.util.CborJsonConverter;
+import com.mdoc.verifier.util.CborParser;
 import com.mdoc.verifier.util.CborUtil;
 import com.mdoc.verifier.util.DecodeWarnings;
+import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ArrayNode;
@@ -33,6 +35,7 @@ import tools.jackson.databind.node.ObjectNode;
  * is tolerated and reported in the warnings.
  */
 @Service
+@AllArgsConstructor
 public class IssuerAuthService {
 
     private static final long TAG_COSE_SIGN1 = 18;   // RFC 9052 §2
@@ -45,6 +48,8 @@ public class IssuerAuthService {
 
     private static final JsonNodeFactory JSON = JsonNodeFactory.instance;
 
+    private final CborParser cborParser;
+
     public ObjectNode decode(final CBORItem issuerAuth, final String path, final DecodeWarnings warnings) {
         // ISO 18013-5 uses the untagged form; the tagged COSE_Sign1_Tagged form (tag 18) is accepted too.
         final CBORItem coseSign1 = CborUtil.hasTag(issuerAuth, TAG_COSE_SIGN1)
@@ -53,8 +58,7 @@ public class IssuerAuthService {
 
         final List<? extends CBORItem> parts = CborUtil.array(coseSign1, path);
         if (parts.size() != 4) {
-            throw new MdocDecodeException(ErrorCode.INVALID_VALUE, path,
-                    "COSE_Sign1 must have 4 elements, got " + parts.size());
+            throw new MdocDecodeException(ErrorCode.INVALID_VALUE, path);
         }
 
         final ObjectNode result = JSON.objectNode();
@@ -68,7 +72,7 @@ public class IssuerAuthService {
     // The protected header is a bstr holding an encoded map; an empty bstr means "no protected headers" (RFC 9052 §3).
     private ObjectNode decodeProtectedHeader(final CBORItem item, final String path) {
         final byte[] encoded = CborUtil.bytes(item, path);
-        return encoded.length == 0 ? JSON.objectNode() : decodeHeader(CborUtil.decode(encoded, path), path);
+        return encoded.length == 0 ? JSON.objectNode() : decodeHeader(cborParser.decode(encoded, path), path);
     }
 
     // header_map = { * label => values }, label = int / tstr (RFC 9052 §3)
@@ -78,7 +82,7 @@ public class IssuerAuthService {
             final CBORItem label = pair.getKey();
             final String name = labelName(label, path);
             if (result.has(name)) {
-                throw new MdocDecodeException(ErrorCode.DUPLICATE_KEY, path, "Header label '" + name + "' occurs more than once");
+                throw new MdocDecodeException(ErrorCode.DUPLICATE_KEY, CborUtil.child(path, name));
             }
             final String valuePath = CborUtil.child(path, name);
             final boolean isX5chain = label instanceof CBORInteger number && number.getValue() == LABEL_X5CHAIN;
@@ -94,7 +98,7 @@ public class IssuerAuthService {
             case CBORString text -> text.getValue();
             case CBORInteger number -> HEADER_LABELS.getOrDefault(number.getValue(), number.getValue().toString());
             case CBORLong number -> number.getValue().toString();
-            default -> throw CborUtil.typeError(path, "int or text string header label", label);
+            default -> throw CborUtil.typeError(path);
         };
     }
 
@@ -106,7 +110,7 @@ public class IssuerAuthService {
             return result;
         }
         if (!(item instanceof CBORItemList)) {
-            throw CborUtil.typeError(path, "byte string or array of byte strings", item);
+            throw CborUtil.typeError(path);
         }
         final List<? extends CBORItem> certificates = CborUtil.array(item, path);
         for (int i = 0; i < certificates.size(); i++) {
@@ -120,19 +124,16 @@ public class IssuerAuthService {
     // computed over that same form, so it is decoded anyway and the non-conformance goes into the warnings.
     private JsonNode decodePayload(final CBORItem item, final String path, final DecodeWarnings warnings) {
         final CBORItem msoBytes = switch (item) {
-            case CBORByteArray payload -> CborUtil.decode(payload.getValue(), path);
+            case CBORByteArray payload -> cborParser.decode(payload.getValue(), path);
             case CBORTaggedItem tagged when CborUtil.hasTag(tagged, TAG_ENCODED_CBOR) -> {
-                warnings.add(ErrorCode.COSE_PAYLOAD_NOT_BSTR, path,
-                        "COSE_Sign1 payload must be a byte string (RFC 9052 §4.2), got MobileSecurityObjectBytes "
-                                + "(tag 24) without the bstr wrapper; decoded anyway, a strict verifier rejects it");
+                warnings.add(ErrorCode.COSE_PAYLOAD_NOT_BSTR, path);
                 yield tagged;
             }
-            case CBORNull nil -> throw new MdocDecodeException(ErrorCode.INVALID_VALUE, path,
-                    "issuerAuth must not have a detached payload");
-            default -> throw CborUtil.typeError(path, "byte string", item);
+            case CBORNull nil -> throw new MdocDecodeException(ErrorCode.INVALID_VALUE, path);
+            default -> throw CborUtil.typeError(path);
         };
         final byte[] encodedMso = CborUtil.bytes(CborUtil.untag(msoBytes, TAG_ENCODED_CBOR, path), path);
-        final CBORItem mso = CborUtil.decode(encodedMso, path);
+        final CBORItem mso = cborParser.decode(encodedMso, path);
 
         CborUtil.textKeyMap(mso, path); // the MSO is a map with text keys: version, digestAlgorithm, valueDigests, ...
         return CborJsonConverter.toJson(mso, path);
